@@ -4,6 +4,8 @@
 
 #include <sys/time.h>
 #include <stdbool.h>
+#include <stdlib.h> 
+
 
 #define FDS_MAX_SIZE FD_SETSIZE
 
@@ -14,7 +16,7 @@ typedef enum multiplexorStatus {
         SUCCESS             = 0,
         MAX_FDS             = 1,
         NO_MEMORY           = 2,
-        ILLEGAL_ARGUMENTS   = 3,
+        INVALID_ARGUMENTS   = 3,
         FD_IN_USE           = 4,
         IO_ERROR            = 5,    
 } multiplexorStatus;
@@ -46,16 +48,13 @@ struct multiplexorInit {
     struct timespec selectTimeout;
 };
 
+/** inicializa la librería */
+multiplexorStatus multiplexorInit(const struct multiplexorInit * c);
+
 const char * multiplexorError(const multiplexorStatus status);
 
-
-/** inicializa la librería */
-multiplexorStatus
-selector_init(const struct selector_init *c);
-
 /** deshace la incialización de la librería */
-multiplexorStatus
-selector_close(void);
+multiplexorStatus multiplexorClose(void);
 
 MultiplexorADT createMultiplexorADT (const size_t initialElements);
 

@@ -2,14 +2,11 @@
 
 //Multiplexor.c
 #include "Multiplexor.h"
-
-#include <stdio.h>  // perror
-#include <stdlib.h> // malloc
-#include <string.h> // memset
-#include <assert.h> // :)
-#include <errno.h>  // :)
+#include <assert.h>  
+#include <stdio.h>  
+#include <string.h> 
+#include <errno.h>
 #include <pthread.h>
-
 #include <stdint.h> // SIZE_MAX
 #include <unistd.h>
 #include <fcntl.h>
@@ -17,13 +14,13 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/signal.h>
-#include "selector.h"
+
 
 #define USED_FD_TYPE(i) ( ( FD_UNUSED != (i)->fd) )
 #define INVALID_FD(fd)  ((fd) < 0 || (fd) >= FDS_MAX_SIZE)
 #define ERROR_DEFAULT_MSG "something failed"
 
-typedef fdType {
+typedef struct fdType {
     int                  fd;
     fdInterest           interest;
     const eventHandler * handler;
@@ -59,12 +56,16 @@ typedef struct MultiplexorCDT {
 struct multiplexorInit conf;
 static sigset_t emptyset, blockset;
 
+static void wakeHandler(const int signal) {
+    // nada que hacer. está solo para interrumpir el select
+}
+
 multiplexorStatus multiplexorInit(const struct multiplexorInit * c) {
     memcpy(&conf, c, sizeof(conf));
 
     multiplexorStatus retVal = SUCCESS;
     struct sigaction act     = {
-        .sa_handler = wake_handler,
+        .sa_handler = wakeHandler,
     };
 
     sigemptyset(&blockset);
@@ -111,9 +112,7 @@ const char * multiplexorError(const multiplexorStatus status) {
     return msg;
 }
 
-static void wakeHandler(const int signal) {
-    // nada que hacer. está solo para interrumpir el select
-}
+
 
 
 multiplexorStatus multiplexorClose(void) {
@@ -127,7 +126,7 @@ static inline void fdInitialize(fdType * fd) {
 }
 
 static void initialize(MultiplexorADT mux, const size_t lastIndex) {
-    check(lastIndex <= mux->size);
+    assert(lastIndex <= mux->size);
     for(size_t i = lastIndex; i < mux->size ; i++)
         fdInitialize(mux->fds + i);
 }
@@ -165,7 +164,7 @@ static size_t nextCapacity(const size_t n) {
     }
     temp = 1UL << bits;
 
-    check(temp >= n);
+    assert(temp >= n);
     if(tmp > FDS_MAX_SIZE) {
         tmp = FDS_MAX_SIZE;
     }
@@ -232,7 +231,7 @@ MultiplexorADT createMultiplexorADT (const size_t initialElements) {
         memset(ret, 0x00, size);
         mux->prototipicTimeout.tv_sec  = conf.select_timeout.tv_sec;
         mux->prototipicTimeout.tv_nsec = conf.select_timeout.tv_nsec;
-        check(mux->maxFd == 0);
+        assert(mux->maxFd == 0);
         mux->resolutionTasks  = 0;
         pthread_mutex_init(&mux->resolutionMutex, 0);
         if(0 != ensureCapacity(mux, initialElements)) {
@@ -376,7 +375,7 @@ static void manageIteration(MultiplexorADT mux) {
             if(FD_ISSET(currentFdType->fd, &mux->backUpReadSet)) {
                 if(READ & currentFdType->interest) {
                     if(0 == currentFdType->handler->read) {
-                        check(("READ arrived but no handler. bug!" == 0)); //LOG VILLA
+                        assert(("READ arrived but no handler. bug!" == 0)); //LOG VILLA
                     } else {
                         currentFdType->handler->read(&key);
                     }
@@ -385,7 +384,7 @@ static void manageIteration(MultiplexorADT mux) {
             if(FD_ISSET(i, &mux->backUpWriteSet)) {
                 if(WRITE & currentFdType->interest) {
                     if(0 == currentFdType->handler->write) {
-                        check(("WRITE arrived but no handler. bug!" == 0)); // LOG VILLA
+                        assert(("WRITE arrived but no handler. bug!" == 0)); // LOG VILLA
                     } else {
                         currentFdType->handler->write(&key);
                     }
@@ -496,4 +495,6 @@ int fdSetNIO(const int fd) {
     }
     return ret;
 }
+
+
 
