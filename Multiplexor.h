@@ -1,16 +1,14 @@
-//MultiplexorADT.h
-#ifndef MULTIPLEXORADT_H
-#define MULTIPLEXORADT_H
+//Multiplexor.h
+#ifndef MULTIPLEXOR_H
+#define MULTIPLEXOR_H
+
+#include <sys/time.h>
+#include <stdbool.h>
 
 #define FDS_MAX_SIZE FD_SETSIZE
 
 
-#define USED_FD_TYPE(i) ( ( FD_UNUSED != (i)->fd) )
-#define INVALID_FD(fd)  ((fd) < 0 || (fd) >= FDS_MAX_SIZE)
-
-
-
-typedef MultiplexorCDT * MultiplexorADT;
+typedef struct MultiplexorCDT * MultiplexorADT;
 
 typedef enum multiplexorStatus {
         SUCCESS             = 0,
@@ -43,6 +41,21 @@ typedef struct eventHandler {
     void (* close) (MultiplexorKey key);
 } eventHandler;
 
+struct multiplexorInit {
+    const int signal;
+    struct timespec selectTimeout;
+};
+
+const char * multiplexorError(const multiplexorStatus status);
+
+
+/** inicializa la librería */
+multiplexorStatus
+selector_init(const struct selector_init *c);
+
+/** deshace la incialización de la librería */
+multiplexorStatus
+selector_close(void);
 
 MultiplexorADT createMultiplexorADT (const size_t initialElements);
 

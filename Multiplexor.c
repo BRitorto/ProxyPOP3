@@ -1,7 +1,27 @@
 
 
-//MultiplexorADT.c
-#include "MultiplexorADT.h"
+//Multiplexor.c
+#include "Multiplexor.h"
+
+#include <stdio.h>  // perror
+#include <stdlib.h> // malloc
+#include <string.h> // memset
+#include <assert.h> // :)
+#include <errno.h>  // :)
+#include <pthread.h>
+
+#include <stdint.h> // SIZE_MAX
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <sys/signal.h>
+#include "selector.h"
+
+#define USED_FD_TYPE(i) ( ( FD_UNUSED != (i)->fd) )
+#define INVALID_FD(fd)  ((fd) < 0 || (fd) >= FDS_MAX_SIZE)
+#define ERROR_DEFAULT_MSG "something failed"
 
 typedef fdType {
     int                  fd;
@@ -34,6 +54,73 @@ typedef struct MultiplexorCDT {
     pthread_mutex_t    resolutionMutex;
     blockingTask *     resolutionTasks;
 } MultiplexorCDT;
+
+// señal a usar para las notificaciones de resolución
+struct multiplexorInit conf;
+static sigset_t emptyset, blockset;
+
+multiplexorStatus multiplexorInit(const struct multiplexorInit * c) {
+    memcpy(&conf, c, sizeof(conf));
+
+    multiplexorStatus retVal = SUCCESS;
+    struct sigaction act     = {
+        .sa_handler = wake_handler,
+    };
+
+    sigemptyset(&blockset);
+    sigaddset  (&blockset, conf.signal);
+    if(-1 == sigprocmask(SIG_BLOCK, &blockset, NULL)) {
+        retVal = IO_ERROR;
+        goto finally;
+    }
+
+    if (sigaction(conf.signal, &act, 0)) {
+        retVal = IO_ERROR;
+        goto finally;
+    }
+    sigemptyset(&emptyset);
+
+finally:
+    return retVal;
+}
+
+const char * multiplexorError(const multiplexorStatus status) {
+    const char * msg;
+    switch(status) {
+        case SUCCESS:
+            msg = "Success";
+            break;
+        case MAX_FDS:
+            msg = "Can't handle any more file descriptors";
+            break;
+        case NO_MEMORY:
+            msg = "Not enough memory";
+            break;
+        case ILLEGAL_ARGUMENTS:
+            msg = "Illegal argument";
+            break;
+        case FD_IN_USE:
+            msg = "Dile descriptor already in use";
+            break;
+        case IO_ERROR:
+            msg = "I/O error";
+            break;
+        default:
+            msg = ERROR_DEFAULT_MSG;
+    }
+    return msg;
+}
+
+static void wakeHandler(const int signal) {
+    // nada que hacer. está solo para interrumpir el select
+}
+
+
+multiplexorStatus multiplexorClose(void) {
+    // Nada para liberar.
+    // TODO(juan): podriamos reestablecer el handler de la señal.
+    return SUCCESS;
+}
 
 static inline void fdInitialize(fdType * fd) {
     fd->fd = FD_UNUSED;
@@ -72,7 +159,7 @@ static void updateSet(MultiplexorADT mux, const fdType * fd) {
 static size_t nextCapacity(const size_t n) {
     unsigned bits = 0;
     size_t temp = n;
-    while(temp != 0) {//next highest power of 2
+    while(temp != 0) { //next highest power of 2
         temp >>= 1;
         bits++;
     }
