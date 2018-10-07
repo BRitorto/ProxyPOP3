@@ -37,7 +37,7 @@ sigtermHandler(const int signal) {
 
 int
 main(const int argc, const char **argv) {
-    unsigned port = 1110;
+    unsigned port = 1111;
     
     close(0);
 
@@ -120,10 +120,7 @@ main(const int argc, const char **argv) {
     int ret = 0;
 finally:
     if(status != SUCCESS) {
-        fprintf(stderr, "%s: %s\n", (err_msg == NULL) ? "": err_msg,
-                                  status == IO_ERROR
-                                      ? strerror(errno)
-                                      : multiplexorError(status));
+        fprintf(stderr, "%s: %s\n", (err_msg == NULL) ? "": err_msg, status == IO_ERROR ? strerror(errno) : multiplexorError(status));
         ret = 2;
     } else if(err_msg) {
         perror(err_msg);
@@ -132,10 +129,8 @@ finally:
     if(mux != NULL) {
         deleteMultiplexorADT(mux);
     }
+    printf("LLEGUE\n");
     multiplexorClose();
-
-    //socksv5_pool_destroy();
-
     if(server >= 0) {
         close(server);
     }

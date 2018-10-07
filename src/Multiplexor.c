@@ -126,6 +126,7 @@ multiplexorStatus multiplexorClose(void) {
 
 static inline void fdInitialize(fdType * fd) {
     fd->fd = FD_UNUSED;
+    fd->data = NULL;
 }
 
 static void initialize(MultiplexorADT mux, const size_t lastIndex) {
@@ -249,8 +250,10 @@ MultiplexorADT createMultiplexorADT (const size_t initialElements) {
 void deleteMultiplexorADT(MultiplexorADT mux) {
     if(mux != NULL) {
         if(mux->fds != NULL) {
-            for(size_t i = 0; i < mux->size ; i++) {
+            printf("SIZE: %d\n", (int)mux->size);
+            for(size_t i = 0; i < mux->size; i++) {
                 if(USED_FD_TYPE(mux->fds + i)) {
+                    printf("%d\n", (int)i);
                     unregisterFd(mux, i);
                 }
             }
@@ -311,12 +314,15 @@ multiplexorStatus unregisterFd(MultiplexorADT mux, const int fd) {
     }
 
     fdType * newFdType = mux->fds + fd;
+    assert(fd == newFdType->fd);
     if(!USED_FD_TYPE(newFdType)) {
         retVal = INVALID_ARGUMENTS;
         goto finally;
     }
 
-    if(newFdType->handler->close != NULL) {
+    if(newFdType->handler != NULL && newFdType->handler->close != NULL) {
+        //printf("%d, %p\n", fd, (void *)newFdType->handler);
+
         MultiplexorKeyCDT key = {
             .mux    = mux,
             .fd   = newFdType->fd,
@@ -330,6 +336,8 @@ multiplexorStatus unregisterFd(MultiplexorADT mux, const int fd) {
 
     memset(newFdType, 0x00, sizeof(*newFdType));
     fdInitialize(newFdType);
+    newFdType->handler = NULL;
+
     mux->maxFd = getMaxFd(mux);
 
 finally:

@@ -29,9 +29,12 @@ static const eventHandler popv3Handler = {
 };
 
 static void popv3Read   (MultiplexorKey key) {
-    //int fd = key->fd;
-    //char buffer[256];
-    //recvfrom();
+    int fd = key->fd;
+    char buffer[256];
+    memset(buffer, 0, 256);
+    recv(fd, buffer, 256, 0);
+    printf("%s",buffer);
+    send(fd, buffer, 256, MSG_NOSIGNAL);
 }
 
 static void popv3Write  (MultiplexorKey key) {
@@ -43,7 +46,7 @@ static void popv3Block  (MultiplexorKey key) {
 }
 
 static void popv3Close  (MultiplexorKey key) {
-
+    unregisterFd(key->mux, key->fd);
 }
 
 void popv3PassiveAccept(MultiplexorKey key) {

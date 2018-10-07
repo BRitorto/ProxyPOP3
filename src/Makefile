@@ -10,11 +10,11 @@ all: clean comp link
 
 comp:$(SOURCES)
 	$(CC) $(CFLAGS) $(SOURCES)
-	@echo "Application Compilation complete."
+	@echo "Compilation complete."
 
 link:$(OBJECTS)
 	$(LINKER) $(LFLAGS) $(OBJECTS)  -o $(TARGET).out
-	@echo "Application Linking complete."
+	@echo "Linking complete."
 
 %.o : %.c
 	$(CC) $(CFLAGS) $< -o $@
@@ -25,6 +25,6 @@ link:$(OBJECTS)
 clean:
 	@$(rm) $(OBJECTS)
 	@$(rm) $(OUTPUTS)
-	@echo "Application Cleanup complete."
+	@echo "Cleanup complete."
 
 .PHONY: clean  all  
