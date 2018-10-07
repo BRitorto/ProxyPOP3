@@ -250,7 +250,6 @@ MultiplexorADT createMultiplexorADT (const size_t initialElements) {
 void deleteMultiplexorADT(MultiplexorADT mux) {
     if(mux != NULL) {
         if(mux->fds != NULL) {
-            printf("SIZE: %d\n", (int)mux->size);
             for(size_t i = 0; i < mux->size; i++) {
                 if(USED_FD_TYPE(mux->fds + i)) {
                     printf("%d\n", (int)i);
@@ -321,12 +320,10 @@ multiplexorStatus unregisterFd(MultiplexorADT mux, const int fd) {
     }
 
     if(newFdType->handler != NULL && newFdType->handler->close != NULL) {
-        //printf("%d, %p\n", fd, (void *)newFdType->handler);
 
         MultiplexorKeyCDT key = {
             .mux    = mux,
             .fd   = newFdType->fd,
-            .data = newFdType->data,
         };
         newFdType->handler->close(&key);
     }

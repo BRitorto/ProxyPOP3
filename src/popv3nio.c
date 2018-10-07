@@ -46,7 +46,7 @@ static void popv3Block  (MultiplexorKey key) {
 }
 
 static void popv3Close  (MultiplexorKey key) {
-    unregisterFd(key->mux, key->fd);
+
 }
 
 void popv3PassiveAccept(MultiplexorKey key) {

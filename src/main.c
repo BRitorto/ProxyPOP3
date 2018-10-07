@@ -97,6 +97,7 @@ main(const int argc, const char **argv) {
     const eventHandler popv3 = {
         .read       = popv3PassiveAccept,
         .write      = NULL,
+        .block      = NULL,
         .close      = NULL, // nada que liberar por ahora
     };
 
@@ -129,7 +130,6 @@ finally:
     if(mux != NULL) {
         deleteMultiplexorADT(mux);
     }
-    printf("LLEGUE\n");
     multiplexorClose();
     if(server >= 0) {
         close(server);
