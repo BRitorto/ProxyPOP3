@@ -8,15 +8,15 @@
 
 /*START_TEST (test_multiplexor_error) {
     const multiplexorStatus data[] = {
-        SUCCESS,
-        NO_MEMORY,
+        MUX_SUCCESS,
+        MUX_NO_MEMORY,
         MAX_FD,
-        INVALID_ARGUMENTS,
-        IO_ERROR,
+        MUX_INVALID_ARGUMENTS,
+        MUX_IO_ERROR,
     };
     // verifica que `selector_error' tiene mensajes especificos
     for(unsigned i = 0 ; i < N(data); i++) {
-        ck_assert_str_ne(ERROR_DEFAULT_MSG, selector_error(data[i]));
+        ck_assert_str_ne(MUX_ERROR_DEFAULT_MSG, selector_error(data[i]));
     }
 }
 END_TEST*/
@@ -49,11 +49,11 @@ START_TEST (testEnsureCapacity) {
     }
 
     size_t n = 1;
-    ck_assert_int_eq(SUCCESS, ensureCapacity(mux, n));
+    ck_assert_int_eq(MUX_SUCCESS, ensureCapacity(mux, n));
     ck_assert_uint_ge(mux->size, n);
 
     n = 10;
-    ck_assert_int_eq(SUCCESS, ensureCapacity(mux, n));
+    ck_assert_int_eq(MUX_SUCCESS, ensureCapacity(mux, n));
     ck_assert_uint_ge(mux->size, n);
 
     const size_t lastSize = mux->size;
@@ -89,7 +89,7 @@ START_TEST (testRegisterFd) {
     MultiplexorADT mux = createMultiplexor(INITIAL_SIZE);
     ck_assert_ptr_nonnull(mux);
 
-    ck_assert_uint_eq(INVALID_ARGUMENTS, registerFd(0, -1, 0, 0, dataMark));
+    ck_assert_uint_eq(MUX_INVALID_ARGUMENTS, registerFd(0, -1, 0, 0, dataMark));
 
     const eventHandler h = {
         .read   = NULL,
@@ -97,7 +97,7 @@ START_TEST (testRegisterFd) {
         .close  = destroyCallback,
     };
     int fd = FDS_MAX_SIZE - 1;
-    ck_assert_uint_eq(SUCCESS,
+    ck_assert_uint_eq(MUX_SUCCESS,
                       registerFd(s, fd, &h, 0, dataMark));
     const fdType * newFdTpe = mux->fds + fd;
     ck_assert_int_eq (fd, mux->maxFd);
@@ -123,9 +123,9 @@ START_TEST (testSelectorRegisterUnregisterRegister) {
         .close  = destroyCallback,
     };
     int fd = FDS_MAX_SIZE - 1;
-    ck_assert_uint_eq(SUCCESS,
+    ck_assert_uint_eq(MUX_SUCCESS,
                       registerFd(s, fd, &h, 0, dataMark));
-    ck_assert_uint_eq(SUCCESS,
+    ck_assert_uint_eq(MUX_SUCCESS,
                       unregisterFd(mux, fd));
 
     const fdType * newFdType = mux->fds + fd;
@@ -135,7 +135,7 @@ START_TEST (testSelectorRegisterUnregisterRegister) {
     ck_assert_uint_eq(0,          newFdType->interest);
     ck_assert_ptr_eq (0x00,       newFdType->data);
 
-    ck_assert_uint_eq(SUCCESS,
+    ck_assert_uint_eq(MUX_SUCCESS,
                       registerFd(mux, fd, &h, 0, dataMark));
     newFdType = mux->fds + fd;
     ck_assert_int_eq (fd, mux->maxFd);
@@ -173,5 +173,5 @@ main(void) {
     srunner_run_all(sr, CK_NORMAL);
     numberFailed = srunner_ntests_failed(sr);
     srunner_free(sr);
-    return (numberFailed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+    return (numberFailed == 0) ? EXIT_MUX_SUCCESS : EXIT_FAILURE;
 }

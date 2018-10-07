@@ -4,12 +4,12 @@
 #define MAX_DATE_SIZE 64
 
 typedef enum logType {
-	WARNING = 0,
-	ERROR 	= 1,
-	DEBUG 	= 2,
-	METRIC 	= 3,
-	INFO 	= 4,
-	FATAL 	= 5,
+	LOG_WARNING = 0,
+	LOG_ERROR 	= 1,
+	LOG_DEBUG 	= 2,
+	LOG_METRIC 	= 3,
+	LOG_INFO 	= 4,
+	LOG_FATAL 	= 5,
 } logType;
 
 typedef enum logStatus {

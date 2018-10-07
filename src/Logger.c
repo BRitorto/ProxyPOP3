@@ -23,7 +23,6 @@ typedef struct LoggerCDT {
 	const char * 	metricFilePath;
 	int 			warningFd;
 	int 			metricFd;
-
 } LoggerCDT;
 
 LoggerADT createLogger(int warningFd, int metricFd) {
@@ -64,22 +63,22 @@ static inline const char * logTypeToString(logType type) {
 	char * ret = NULL;
 
 	switch(type) {
-		case WARNING:
+		case LOG_WARNING:
 			ret = "WARNING";
 			break;
-		case ERROR:
+		case LOG_ERROR:
 			ret = "ERROR";
 			break;
-		case INFO:
+		case LOG_INFO:
 			ret = "INFO";
 			break;
-		case DEBUG:
+		case LOG_DEBUG:
 			ret = "DEBUG";
 			break;
-		case METRIC:
+		case LOG_METRIC:
 			ret = "METRIC";
 			break;
-		case FATAL:
+		case LOG_FATAL:
 			ret = "FATAL";
 			break;
 		default:
@@ -96,9 +95,9 @@ logStatus logLogger(LoggerADT logger, Log * log) {
 		char logString[MAX_LOG_SIZE];
 		sprintf(logString, "%s - %s: <%s> PID:%d RIP:%s LIP: %s\n", log->date, logTypeToString(log->type), log->message, log->pid, log->remoteIp, log-> localIp);
 		int fd = -1;
-		if(log->type == METRIC) {
+		if(log->type == LOG_METRIC) {
 			fd = logger->metricFd;
-		} else if (log->type == WARNING || log->type == ERROR || log->type == FATAL || log->type == DEBUG || log ->type == INFO) {
+		} else if (log->type == LOG_WARNING || log->type == LOG_ERROR || log->type == LOG_FATAL || log->type == LOG_DEBUG || log ->type == LOG_INFO) {
 			fd = logger->warningFd;
 		}
 		if(fd > 0)

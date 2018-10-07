@@ -43,7 +43,7 @@ main(const int argc, const char **argv) {
     close(0);
 
     const char * err_msg = NULL;
-    multiplexorStatus status = SUCCESS;
+    multiplexorStatus status = MUX_SUCCESS;
     MultiplexorADT mux = NULL;
 
     struct sockaddr_in addr;
@@ -104,14 +104,14 @@ main(const int argc, const char **argv) {
     };
 
     status = registerFd(mux, server, &popv3, READ, NULL);
-    if(status != SUCCESS) {
+    if(status != MUX_SUCCESS) {
         err_msg = "registering fd";
         goto finally;
     }
     for(;!done;) {
         err_msg = NULL;
         status = muxSelect(mux);
-        if(status != SUCCESS) {
+        if(status != MUX_SUCCESS) {
             err_msg = "serving";
             goto finally;
         }
@@ -122,8 +122,8 @@ main(const int argc, const char **argv) {
 
     int ret = 0;
 finally:
-    if(status != SUCCESS) {
-        fprintf(stderr, "%s: %s\n", (err_msg == NULL) ? "": err_msg, status == IO_ERROR ? strerror(errno) : multiplexorError(status));
+    if(status != MUX_SUCCESS) {
+        fprintf(stderr, "%s: %s\n", (err_msg == NULL) ? "": err_msg, status == MUX_IO_ERROR ? strerror(errno) : multiplexorError(status));
         ret = 2;
     } else if(err_msg) {
         perror(err_msg);

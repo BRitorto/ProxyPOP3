@@ -71,7 +71,7 @@ void popv3PassiveAccept(MultiplexorKey key) {
     memcpy(&state->client_addr, &client_addr, client_addr_len);
     state->client_addr_len = client_addr_len;
     */
-    if(SUCCESS != registerFd(key->mux, client, &popv3Handler, READ, NULL)) {
+    if(MUX_SUCCESS != registerFd(key->mux, client, &popv3Handler, READ, NULL)) {
         goto fail;
     }
     return ;
