@@ -12,7 +12,7 @@ void RunAllTests(void)
 	CuSuite* suite = CuSuiteNew();
 
 	CuSuiteAddSuite(suite, CuGetSuite());
-	CuSuiteAddSuite(suite, getMultiplexoADTTest());
+	CuSuiteAddSuite(suite, getMultiplexoTest());
 
 	CuSuiteRun(suite);
 	CuSuiteSummary(suite, output);
