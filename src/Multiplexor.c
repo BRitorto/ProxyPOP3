@@ -252,7 +252,6 @@ void deleteMultiplexorADT(MultiplexorADT mux) {
         if(mux->fds != NULL) {
             for(size_t i = 0; i < mux->size; i++) {
                 if(USED_FD_TYPE(mux->fds + i)) {
-                    printf("%d\n", (int)i);
                     unregisterFd(mux, i);
                 }
             }
