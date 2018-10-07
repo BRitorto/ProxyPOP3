@@ -26,18 +26,20 @@
 #include "Multiplexor.h"
 #include "popv3nio.h"
 
-
+union originServerAddr {
+    char fqdn[0xFF];
+    struct sockaddr_in  ipv4;
+    struct sockaddr_in6 ipv6;
+};
 
 static bool done = false;
 
-static void
-sigtermHandler(const int signal) {
+static void sigtermHandler(const int signal) {
     printf("signal %d, cleaning up and exiting\n",signal);
     done = true;
 }
 
-int
-main(const int argc, const char **argv) {
+int main(const int argc, const char **argv) {
     unsigned port = 1111;
     
     close(0);
