@@ -27,6 +27,7 @@
 #include "popv3nio.h"
 
 
+
 static bool done = false;
 
 static void
@@ -58,6 +59,7 @@ main(const int argc, const char **argv) {
     }
 
     fprintf(stdout, "Listening on TCP port %d\n", port);
+
 
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
 
