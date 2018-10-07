@@ -13,12 +13,12 @@
 typedef struct MultiplexorCDT * MultiplexorADT;
 
 typedef enum multiplexorStatus {
-        SUCCESS             = 0,
-        MAX_FDS             = 1,
-        NO_MEMORY           = 2,
-        INVALID_ARGUMENTS   = 3,
-        FD_IN_USE           = 4,
-        IO_ERROR            = 5,    
+        MUX_SUCCESS             = 0,
+        MUX_MAX_FDS             = 1,
+        MUX_NO_MEMORY           = 2,
+        MUX_INVALID_ARGUMENTS   = 3,
+        MUX_FD_IN_USE           = 4,
+        MUX_IO_ERROR            = 5,    
 } multiplexorStatus;
 
 typedef enum fdInterest {

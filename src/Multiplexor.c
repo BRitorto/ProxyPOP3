@@ -66,7 +66,7 @@ static void wakeHandler(const int signal) {
 multiplexorStatus multiplexorInit(const struct multiplexorInit * c) {
     memcpy(&conf, c, sizeof(conf));
 
-    multiplexorStatus retVal = SUCCESS;
+    multiplexorStatus retVal = MUX_SUCCESS;
     struct sigaction act     = {
         .sa_handler = wakeHandler,
     };
@@ -74,12 +74,12 @@ multiplexorStatus multiplexorInit(const struct multiplexorInit * c) {
     sigemptyset(&blockset);
     sigaddset  (&blockset, conf.signal);
     if(-1 == sigprocmask(SIG_BLOCK, &blockset, NULL)) {
-        retVal = IO_ERROR;
+        retVal = MUX_IO_ERROR;
         goto finally;
     }
 
     if (sigaction(conf.signal, &act, 0)) {
-        retVal = IO_ERROR;
+        retVal = MUX_IO_ERROR;
         goto finally;
     }
     sigemptyset(&emptyset);
@@ -91,22 +91,22 @@ finally:
 const char * multiplexorError(const multiplexorStatus status) {
     const char * msg;
     switch(status) {
-        case SUCCESS:
+        case MUX_SUCCESS:
             msg = "Success";
             break;
-        case MAX_FDS:
+        case MUX_MAX_FDS:
             msg = "Can't handle any more file descriptors";
             break;
-        case NO_MEMORY:
+        case MUX_NO_MEMORY:
             msg = "Not enough memory";
             break;
-        case INVALID_ARGUMENTS:
+        case MUX_INVALID_ARGUMENTS:
             msg = "Invalid arguments";
             break;
-        case FD_IN_USE:
+        case MUX_FD_IN_USE:
             msg = "File descriptor already in use";
             break;
-        case IO_ERROR:
+        case MUX_IO_ERROR:
             msg = "I/O error";
             break;
         default:
@@ -121,7 +121,7 @@ const char * multiplexorError(const multiplexorStatus status) {
 multiplexorStatus multiplexorClose(void) {
     // Nada para liberar.
     // TODO(juan): podriamos reestablecer el handler de la señal.
-    return SUCCESS;
+    return MUX_SUCCESS;
 }
 
 static inline void fdInitialize(fdType * fd) {
@@ -191,18 +191,18 @@ static size_t nextHighestPowerOf2(size_t n)
 }*/
 
 static multiplexorStatus ensureCapacity(MultiplexorADT mux, const size_t n) {
-    multiplexorStatus retVal = SUCCESS;
+    multiplexorStatus retVal = MUX_SUCCESS;
 
     const size_t elementSize = sizeof(*mux->fds);
     if(n < mux->size) 
-        retVal = SUCCESS;
+        retVal = MUX_SUCCESS;
     else if(n > FDS_MAX_SIZE) 
-        retVal = MAX_FDS;
+        retVal = MUX_MAX_FDS;
     else if(NULL == mux->fds) {
         const size_t newSize = nextCapacity(n);
         mux->fds = calloc(newSize, elementSize);
         if(NULL == mux->fds)
-            retVal = NO_MEMORY;
+            retVal = MUX_NO_MEMORY;
         else {
             mux->size = newSize;
             initialize(mux, 0);
@@ -210,11 +210,11 @@ static multiplexorStatus ensureCapacity(MultiplexorADT mux, const size_t n) {
     } else {
         const size_t newSize = nextCapacity(n);
         if (newSize > SIZE_MAX/elementSize)
-            retVal = NO_MEMORY;
+            retVal = MUX_NO_MEMORY;
         else {
             fdType * temp = realloc(mux->fds, newSize * elementSize);
             if(NULL == temp) {
-                retVal = NO_MEMORY;
+                retVal = MUX_NO_MEMORY;
             } else {
                 mux->fds  = temp;
                 const size_t oldSize = mux->size;
@@ -270,22 +270,22 @@ void deleteMultiplexorADT(MultiplexorADT mux) {
 }
 
 multiplexorStatus registerFd(MultiplexorADT mux, const int fd, const eventHandler * handler, const fdInterest interest, void * data) {
-    multiplexorStatus retVal = SUCCESS;
+    multiplexorStatus retVal = MUX_SUCCESS;
     if(mux == NULL || INVALID_FD(fd) || handler == NULL) {
-        retVal = INVALID_ARGUMENTS;
+        retVal = MUX_INVALID_ARGUMENTS;
         goto finally;
     }
     size_t ufd = (size_t)fd;
     if(ufd > mux->size) {
         retVal = ensureCapacity(mux, ufd);
-        if(SUCCESS != retVal) {
+        if(MUX_SUCCESS != retVal) {
             goto finally;
         }
     }
 
     fdType * newFdType = mux->fds + ufd;
     if(USED_FD_TYPE(newFdType)) {
-        retVal = FD_IN_USE;
+        retVal = MUX_FD_IN_USE;
             goto finally;
         } else {
         newFdType->fd       = fd;
@@ -304,17 +304,17 @@ finally:
 }
 
 multiplexorStatus unregisterFd(MultiplexorADT mux, const int fd) {
-    multiplexorStatus retVal = SUCCESS;
+    multiplexorStatus retVal = MUX_SUCCESS;
 
     if(NULL == mux || INVALID_FD(fd)) {
-        retVal = INVALID_ARGUMENTS;
+        retVal = MUX_INVALID_ARGUMENTS;
         goto finally;
     }
 
     fdType * newFdType = mux->fds + fd;
     assert(fd == newFdType->fd);
     if(!USED_FD_TYPE(newFdType)) {
-        retVal = INVALID_ARGUMENTS;
+        retVal = MUX_INVALID_ARGUMENTS;
         goto finally;
     }
 
@@ -341,15 +341,15 @@ finally:
 }
 
 multiplexorStatus setInterest(MultiplexorADT mux, int fd, fdInterest interest) {
-    multiplexorStatus retVal = SUCCESS;
+    multiplexorStatus retVal = MUX_SUCCESS;
 
     if(NULL == mux || INVALID_FD(fd)) {
-        retVal = INVALID_ARGUMENTS;
+        retVal = MUX_INVALID_ARGUMENTS;
         goto finally;
     }
     fdType * newFdType = mux->fds + fd;
     if(!USED_FD_TYPE(newFdType)) {
-        retVal = INVALID_ARGUMENTS;
+        retVal = MUX_INVALID_ARGUMENTS;
         goto finally;
     }
     newFdType->interest = interest;
@@ -362,7 +362,7 @@ multiplexorStatus setInterestKey(MultiplexorKey key, fdInterest interest) {
     multiplexorStatus retVal;
 
     if(NULL == key || NULL == key->mux || INVALID_FD(key->fd))
-        retVal = INVALID_ARGUMENTS;
+        retVal = MUX_INVALID_ARGUMENTS;
     else 
         retVal = setInterest(key->mux, key->fd, interest);
     
@@ -427,11 +427,11 @@ static void manageBlockNotifications(MultiplexorADT mux) {
 
 
 multiplexorStatus notifyBlock(MultiplexorADT  mux, const int fd) {
-    multiplexorStatus retVal = SUCCESS;
+    multiplexorStatus retVal = MUX_SUCCESS;
 
     blockingTask * task = malloc(sizeof(*task));
     if(task == NULL) {
-        retVal = NO_MEMORY;
+        retVal = MUX_NO_MEMORY;
         goto finally;
     }
     task->mux  = mux;
@@ -448,7 +448,7 @@ finally:
 }
 
 multiplexorStatus muxSelect(MultiplexorADT mux) {
-    multiplexorStatus retVal = SUCCESS;
+    multiplexorStatus retVal = MUX_SUCCESS;
 
     memcpy(&mux->backUpReadSet, &mux->readSet, sizeof(mux->backUpReadSet));
     memcpy(&mux->backUpWriteSet, &mux->writeSet, sizeof(mux->backUpWriteSet));
@@ -474,17 +474,17 @@ multiplexorStatus muxSelect(MultiplexorADT mux) {
                         }
                     }
                 }
-                retVal = IO_ERROR;
+                retVal = MUX_IO_ERROR;
                 break;
             default:
-                retVal = IO_ERROR;
+                retVal = MUX_IO_ERROR;
                 goto finally;
 
         }
     } else {
         manageIteration(mux);
     }
-    if(retVal == SUCCESS) {
+    if(retVal == MUX_SUCCESS) {
         manageBlockNotifications(mux);
     }
 finally:

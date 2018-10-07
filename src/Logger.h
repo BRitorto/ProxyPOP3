@@ -5,7 +5,7 @@
 
 typedef enum logType {
 	LOG_WARNING = 0,
-	LOGG_ERROR 	= 1,
+	LOG_ERROR 	= 1,
 	LOG_DEBUG 	= 2,
 	LOG_METRIC 	= 3,
 	LOG_INFO 	= 4,
@@ -13,7 +13,7 @@ typedef enum logType {
 } logType;
 
 typedef enum logStatus {
-	LOG_ERROR = 1,
+	LOGG_ERROR = 1,
 } logStatus;
 
 typedef struct Log {

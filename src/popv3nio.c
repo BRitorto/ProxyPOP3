@@ -12,6 +12,25 @@
 
 #include <arpa/inet.h>
 #include "popv3nio.h"
+#include "buffer.h"
+
+typedef enum popv3State {
+    COPY,
+    DONE,
+    ERROR,
+} popv3State;
+
+/** usado por COPY */
+struct copy {
+    /** el otro file descriptor */
+    int         *fd;
+    /** el buffer que se utiliza para hacer la copia */
+    bufferADT       rb, wb;
+    /** ¿cerramos ya la escritura o la lectura? */
+    fdInterest duplex;
+
+    struct copy * other;
+};
 
 static void popv3Read   (MultiplexorKey key);
 
@@ -37,7 +56,7 @@ static void popv3Read   (MultiplexorKey key) {
     printf("%s",buffer);
     send(fd, buffer, 256, MSG_NOSIGNAL);*/
 
-    
+
 }
 
 static void popv3Write  (MultiplexorKey key) {
