@@ -29,12 +29,15 @@ static const eventHandler popv3Handler = {
 };
 
 static void popv3Read   (MultiplexorKey key) {
+    /* echo server
     int fd = key->fd;
     char buffer[256];
     memset(buffer, 0, 256);
     recv(fd, buffer, 256, 0);
     printf("%s",buffer);
-    send(fd, buffer, 256, MSG_NOSIGNAL);
+    send(fd, buffer, 256, MSG_NOSIGNAL);*/
+
+    
 }
 
 static void popv3Write  (MultiplexorKey key) {
@@ -61,6 +64,8 @@ void popv3PassiveAccept(MultiplexorKey key) {
     if(fdSetNIO(client) == -1) {
         goto fail;
     }
+
+
     /*state = socks5_new(client);
     if(state == NULL) {
         // sin un estado, nos es imposible manejaro.
@@ -71,7 +76,7 @@ void popv3PassiveAccept(MultiplexorKey key) {
     memcpy(&state->client_addr, &client_addr, client_addr_len);
     state->client_addr_len = client_addr_len;
     */
-    if(MUX_SUCCESS != registerFd(key->mux, client, &popv3Handler, READ, NULL)) {
+    if(MUX_SUCCESS != registerFd(key->mux, client, &popv3Handler, READ, key->data)) {
         goto fail;
     }
     return ;

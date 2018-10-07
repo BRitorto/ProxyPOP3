@@ -5,7 +5,7 @@
 
 typedef enum logType {
 	LOG_WARNING = 0,
-	LOG_ERROR 	= 1,
+	LOGG_ERROR 	= 1,
 	LOG_DEBUG 	= 2,
 	LOG_METRIC 	= 3,
 	LOG_INFO 	= 4,

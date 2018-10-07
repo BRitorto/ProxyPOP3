@@ -22,15 +22,11 @@
 #include <sys/socket.h> 
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include "Multiplexor.h"
 #include "popv3nio.h"
-
-union originServerAddr {
-    char fqdn[0xFF];
-    struct sockaddr_in  ipv4;
-    struct sockaddr_in6 ipv6;
-};
 
 static bool done = false;
 
@@ -40,7 +36,24 @@ static void sigtermHandler(const int signal) {
 }
 
 int main(const int argc, const char **argv) {
-    unsigned port = 1111;
+    unsigned port = 1110;
+
+    in_port_t originPort = 110;
+    originServerAddr originAddr;
+    int originFd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if(originFd == -1){
+        exit(1);
+    }
+    memset(&(originAddr.ipv4), 0, sizeof(originAddr.ipv4));
+    originAddr.ipv4.sin_family = AF_INET;
+    originAddr.ipv4.sin_port = htons(originPort); 
+    if(inet_pton(AF_INET, "127.0.0.1", &originAddr.ipv4.sin_addr.s_addr) <= 0) {
+        // si devuelve 0 es que el string con la ip es invalido y si devuelve <0 es que fallo
+        exit(1);
+    }
+    if(connect(originFd, (struct sockaddr *) &originAddr.ipv4, sizeof(originAddr.ipv4)) == -1) {
+        exit(1);
+    }
     
     close(0);
 
@@ -105,7 +118,7 @@ int main(const int argc, const char **argv) {
         .close      = NULL, // nada que liberar por ahora
     };
 
-    status = registerFd(mux, server, &popv3, READ, NULL);
+    status = registerFd(mux, server, &popv3, READ, &originFd);
     if(status != MUX_SUCCESS) {
         err_msg = "registering fd";
         goto finally;
