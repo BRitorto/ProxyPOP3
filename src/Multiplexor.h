@@ -56,9 +56,9 @@ const char * multiplexorError(const multiplexorStatus status);
 /** deshace la incialización de la librería */
 multiplexorStatus multiplexorClose(void);
 
-MultiplexorADT createMultiplexorADT (const size_t initialElements);
+MultiplexorADT createMultiplexor (const size_t initialElements);
 
-void deleteMultiplexorADT(MultiplexorADT mux);
+void deleteMultiplexor(MultiplexorADT mux);
 
 multiplexorStatus registerFd(MultiplexorADT mux, const int fd, const eventHandler * handler, const fdInterest interest, void * data);
 

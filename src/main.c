@@ -89,7 +89,7 @@ main(const int argc, const char **argv) {
         goto finally;
     }
 
-    mux = createMultiplexorADT(1024);
+    mux = createMultiplexor(1024);
     if(mux == NULL) {
         err_msg = "unable to create MultiplexorADT";
         goto finally;
@@ -128,7 +128,7 @@ finally:
         ret = 1;
     }
     if(mux != NULL) {
-        deleteMultiplexorADT(mux);
+        deleteMultiplexor(mux);
     }
     multiplexorClose();
     if(server >= 0) {

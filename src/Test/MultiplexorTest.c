@@ -4,7 +4,7 @@
 #define INITIAL_SIZE ((size_t) 1024)
 
 // para poder testear las funciones estaticas
-#include "MultiplexorADT.c"
+#include "Multiplexor.c"
 
 /*START_TEST (test_multiplexor_error) {
     const multiplexorStatus data[] = {
@@ -43,7 +43,7 @@ START_TEST (testNextCapacity) {
 END_TEST
 
 START_TEST (testEnsureCapacity) {
-    MultiplexorADT mux = createMultiplexorADT(0);
+    MultiplexorADT mux = createMultiplexor(0);
     for(size_t i = 0; i < mux->size; i++) {
         ck_assert_int_eq(FD_UNUSED, mux->fds[i].fd);
     }
@@ -65,9 +65,9 @@ START_TEST (testEnsureCapacity) {
         ck_assert_int_eq(FD_UNUSED, mux->fds[i].fd);
     }
 
-    deleteMultiplexorADT(mux);
+    deleteMultiplexor(mux);
 
-    ck_assert_ptr_null(createMultiplexorADT(FDS_MAX_SIZE + 1));
+    ck_assert_ptr_null(createMultiplexor(FDS_MAX_SIZE + 1));
 }
 END_TEST
 
@@ -86,7 +86,7 @@ static void destroyCallback(MultiplexorKey key) {
 
 START_TEST (testRegisterFd) {
     destroyCount = 0;
-    MultiplexorADT mux = createMultiplexorADT(INITIAL_SIZE);
+    MultiplexorADT mux = createMultiplexor(INITIAL_SIZE);
     ck_assert_ptr_nonnull(mux);
 
     ck_assert_uint_eq(INVALID_ARGUMENTS, registerFd(0, -1, 0, 0, dataMark));
@@ -106,7 +106,7 @@ START_TEST (testRegisterFd) {
     ck_assert_uint_eq(0,  newFdTpe->interest);
     ck_assert_ptr_eq (dataMark,  newFdTpe->data);
 
-    deleteMultiplexorADT(mux);
+    deleteMultiplexor(mux);
     ck_assert_uint_eq(1, destroyCount);
 
 }
@@ -114,7 +114,7 @@ END_TEST
 
 START_TEST (testSelectorRegisterUnregisterRegister) {
     destroyCount = 0;
-    MultiplexorADT mux = createMultiplexorADT(INITIAL_SIZE);
+    MultiplexorADT mux = createMultiplexor(INITIAL_SIZE);
     ck_assert_ptr_nonnull(s);
 
     const struct fd_handler h = {

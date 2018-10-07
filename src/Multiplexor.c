@@ -1,6 +1,7 @@
 
 
 //Multiplexor.c
+
 #include "Multiplexor.h"
 #include <assert.h>  
 #include <stdio.h>  
@@ -115,9 +116,6 @@ const char * multiplexorError(const multiplexorStatus status) {
     return msg;
 }
 
-
-
-
 multiplexorStatus multiplexorClose(void) {
     // Nada para liberar.
     // TODO(juan): podriamos reestablecer el handler de la señal.
@@ -229,7 +227,7 @@ static multiplexorStatus ensureCapacity(MultiplexorADT mux, const size_t n) {
 }
 
 
-MultiplexorADT createMultiplexorADT (const size_t initialElements) {
+MultiplexorADT createMultiplexor(const size_t initialElements) {
     size_t size = sizeof(MultiplexorCDT);
     MultiplexorADT mux = malloc(size);
     if(mux != NULL) {
@@ -240,14 +238,14 @@ MultiplexorADT createMultiplexorADT (const size_t initialElements) {
         mux->resolutionTasks  = 0;
         pthread_mutex_init(&mux->resolutionMutex, 0);
         if(0 != ensureCapacity(mux, initialElements)) {
-            deleteMultiplexorADT(mux);
+            deleteMultiplexor(mux);
             mux = NULL;
         }
     }
     return mux;
 }
 
-void deleteMultiplexorADT(MultiplexorADT mux) {
+void deleteMultiplexor(MultiplexorADT mux) {
     if(mux != NULL) {
         if(mux->fds != NULL) {
             for(size_t i = 0; i < mux->size; i++) {
