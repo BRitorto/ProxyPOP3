@@ -1,0 +1,5 @@
+#compile files
+*.o
+
+#logs
+*.log
