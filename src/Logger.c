@@ -1,120 +1,126 @@
 /**
-* Logger.c - Un ADT que permite manejar el logging del servidor.
+* logger.c - Permite manejar el logging.
 */
 
-#include "Logger.h"
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/time.h>
+#include "logger.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
+#include <stdbool.h>
+#include <unistd.h>
 #include <time.h>
 
-#define MAX_LOG_TYPE_SIZE 10
-#define MAX_LOG_MSG_SIZE 64
-#define MAX_IP_SIZE 16
-#define MAX_LOG_SIZE MAX_LOG_TYPE_SIZE + MAX_DATE_SIZE + MAX_LOG_TYPE_SIZE + MAX_LOG_MSG_SIZE + 2*MAX_IP_SIZE
+static struct {
+	int 		level;
+	bool 		quiet;
+	bool 		color;
+	int * 		fdsLevel;
+	void *		udata;
+	log_LockFn 	lock;
+} logger;
 
-typedef struct LoggerCDT {
-	const char * 	warningFilePath;
-	const char * 	metricFilePath;
-	int 			warningFd;
-	int 			metricFd;
+static const char * levelNames[] = {
+	"TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "FATAL", "METRIC"
+};
 
-} LoggerCDT;
+static const char * levelColors[] = {
+  "\x1b[94m", "\x1b[36m", "\x1b[32m", "\x1b[33m", "\x1b[31m", "\x1b[35m", "\x1b[94m"
+};
 
-LoggerADT createLogger(int warningFd, int metricFd) {
-	LoggerADT newLogger = malloc(sizeof(LoggerCDT));
-	if(newLogger != NULL) {
-		memset(newLogger, 0, sizeof(LoggerCDT));
-		newLogger->warningFd = warningFd;
-		newLogger->metricFd = metricFd;
-	}
-	return newLogger;
+void loggerSetUdata(void *udata) {
+  	logger.udata = udata;
 }
 
-LoggerADT createLoggerWithFiles(const char * warningFilePath, const char * metricFilePath) {
-	int warningFd = open(warningFilePath, O_WRONLY | O_CREAT);
-	int metricFd = open(metricFilePath, O_WRONLY | O_CREAT);
-
-	if(warningFd >= 0 && metricFd >= 0) {
-		LoggerADT newLogger = createLogger(warningFd, metricFd);
-		if(newLogger != NULL) {
-			newLogger->warningFilePath = warningFilePath;
-			newLogger->metricFilePath = metricFilePath;
-		}
-		return newLogger;
-	}
-	return NULL;
+void loggerSetLock(log_LockFn fn) {
+  	logger.lock = fn;
 }
 
-static inline void setDateTime(Log * log) {
-	struct timeval tv;
-	gettimeofday (&tv, NULL);
-	struct tm *nowtm;
-	time_t nowtime = tv.tv_sec;
-	nowtm = localtime(&nowtime);
-	strftime(log->date, sizeof(log->date), "%Y-%m-%d %H:%M:%S", nowtm);
+void loggerSetFdsByLevel(int * fdsLevels) {
+ 	logger.fdsLevel = fdsLevels;
 }
 
-static inline const char * logTypeToString(logType type) {
-	char * ret = NULL;
-
-	switch(type) {
-		case LOG_WARNING:
-			ret = "WARNING";
-			break;
-		case LOG_ERROR:
-			ret = "ERROR";
-			break;
-		case LOG_INFO:
-			ret = "INFO";
-			break;
-		case LOG_DEBUG:
-			ret = "DEBUG";
-			break;
-		case LOG_METRIC:
-			ret = "METRIC";
-			break;
-		case LOG_FATAL:
-			ret = "FATAL";
-			break;
-		default:
-			ret = "UNDEFINED";
-			break;
-	}
-	return ret;
-} 
-
-logStatus logLogger(LoggerADT logger, Log * log) {
-	if(logger != NULL && log != NULL) {
-
-		setDateTime(log);
-		char logString[MAX_LOG_SIZE];
-		sprintf(logString, "%s - %s: <%s> PID:%d RIP:%s LIP: %s\n", log->date, logTypeToString(log->type), log->message, log->pid, log->remoteIp, log-> localIp);
-		int fd = -1;
-		if(log->type == LOG_METRIC) {
-			fd = logger->metricFd;
-		} else if (log->type == LOG_WARNING || log->type == LOG_ERROR || log->type == LOG_FATAL || log->type == LOG_DEBUG || log ->type == LOG_INFO) {
-			fd = logger->warningFd;
-		}
-		if(fd > 0)
-			write(fd, logString, MAX_LOG_SIZE);
-
-	}
-	return LOGG_ERROR;
+void loggerSetLevel(int level) {
+  	logger.level = level;
 }
 
-void deleteLogger(LoggerADT logger) {
-	if(logger != NULL) {
-		if(logger->warningFd >= 0)
-			close(logger->warningFd);
-		if(logger->metricFd >= 0)
-			close(logger->metricFd);
-		free(logger);
-	}
+void loggerSetQuiet(bool enable) {
+  	logger.quiet = enable;
 }
 
+void loggerSetColor(bool enable) {
+  	logger.color = enable;
+}
+
+static void lock() {
+  	if (logger.lock)
+    	logger.lock(logger.udata, 1);
+}
+
+static void unlock() {
+  	if (logger.lock)
+    	logger.lock(logger.udata, 0);
+}
+
+logStatus vlogLogger(int level, const char * file, int line, const char *fmt, va_list args) {
+	if (level < logger.level) {
+		return LOG_NO_LEVEL;
+	}
+
+	/* Acquire lock */
+	lock();
+
+	/* Get current time */
+	time_t t = time(NULL);
+	struct tm *lt = localtime(&t);
+
+	/* Log to stderr */
+	if (!logger.quiet) {
+		char buf[64];
+		buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
+		if(logger.color)
+			fprintf(stderr, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
+					buf, levelColors[level], levelNames[level], file, line);
+		else
+			fprintf(stderr, "%s %-5s %s:%d: ", buf, levelNames[level], file, line);
+		vfprintf(stderr, fmt, args);
+		fprintf(stderr, "\n");
+		fflush(stderr);
+	}
+
+	/* Log to file */
+	if (logger.fdsLevel[level] >= 0) {
+		char buf[64];
+		buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
+		dprintf(logger.fdsLevel[level], "%s %-5s %s:%d: ", buf, levelNames[level], file, line);
+		vdprintf(logger.fdsLevel[level], fmt, args);
+		dprintf(logger.fdsLevel[level], "\n");
+		fsync(logger.fdsLevel[level]);
+	}
+
+	/* Release lock */
+	unlock();
+	return LOG_SUCCESS;
+}
+
+logStatus logLogger(int level, const char * file, int line, const char *fmt, ...) {
+	va_list args;
+	logStatus retVal;
+
+    va_start(args, fmt);
+	retVal = vlogLogger(level, file, line, fmt, args);
+    va_end(args);
+	return retVal;
+}
+
+/*
+int main() {
+	loggerSetColor(true);
+	loggerSetQuiet(false);
+	loggerSetColor(true);
+	loggerSetLevel(LOG_LEVEL_TRACE);
+	int fds[] = {-1, -1, -1, -1, -1, -1, -1};
+	loggerSetFdsByLevel(fds);	
+	logTrace("Hello %s", "world");
+}
+*/

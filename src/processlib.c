@@ -13,13 +13,12 @@ pid_t * childFactory(int qty, char * childName)
 	for (int i = 0; i < qty; i++)
 	{ 
 		children[i] = fork();
-		checkFail(children[i], "fork() Failed");
+		checkFail(children[i], "fork() child: %d", i);
 		
 		if (children[i] == 0)
 		{
 			execlp(childName, " ", ((char *)NULL));
-
-			fail("exec() Failed");
+			fail("exec() child: %d", i);
 		}
 	}
 	return children;
@@ -32,12 +31,12 @@ pid_t * childFactoryWithArgs(int qty, char * childPath, char ** args)
 	for (int i = 0; i < qty; i++)
 	{ 
 		children[i] = fork();
-		checkFail(children[i], "fork() Failed");
+		checkFail(children[i], "fork() child: %d", i);
 
 		if (children[i] == 0)
 		{
 			execlp(childPath, args[i], ((char *)NULL));
-			fail("exec() Failed");
+			fail("exec() child: %d", i);
 		}
 	}
 	return children;
@@ -62,7 +61,7 @@ fd_set createASetOfFds(int qty, ...)
 void waitForFds(int lastFd, fd_set fdReadSet)
 {
     int result = select(lastFd + 1, &fdReadSet, 0, 0, NULL);
-   	checkFail(result, "select() Failed");
+   	checkFail(result, "select()");
 }
 
 void freeSpace(int qty, ...) 

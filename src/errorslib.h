@@ -1,15 +1,16 @@
 #ifndef ERRORS_LIB_H
 #define ERRORS_LIB_H
 
-void checkFail(int aNumber, char * msg);
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdbool.h>
 
-void fail(char * msg);
 
-void checkIsNotNull(void * aPointer, char * msg);
-
-void checkIsNull(void * aPointer, char * msg);
-
-void checkAreEquals(int aNumber, int otherNumber, char * msg);
+#define fail(...)                                   vfail(                                __FILE__, __LINE__, __VA_ARGS__)
+#define checkFail(aNumber, ...)                     vcheckFail(aNumber,                   __FILE__, __LINE__, __VA_ARGS__)
+#define checkIsNotNull(aPointer, ...)               vcheckIsNotNull(aPointer,             __FILE__, __LINE__, __VA_ARGS__)
+#define checkIsNull(aPointer, ...)                  vcheckIsNull(aPointer,                __FILE__, __LINE__, __VA_ARGS__)
+#define checkAreEquals(aNumber, otherNumber, ...)   vcheckAreEquals(aNumber, otherNumber, __FILE__, __LINE__, __VA_ARGS__)
 
 #endif
 
