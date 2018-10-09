@@ -105,8 +105,7 @@ void testRegisterFd (CuTest * tc) {
 }
 
 
-CuSuite * 
-getMultiplexoTest(void) {
+CuSuite * getMultiplexorTest(void) {
     CuSuite* suite = CuSuiteNew();
     
     SUITE_ADD_TEST(suite, testNextCapacity);

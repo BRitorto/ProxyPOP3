@@ -39,7 +39,7 @@ inline bool canRead(bufferADT buffer)
 {
 	if(buffer == NULL)
 		return false;
-	return buffer->limitPtr - buffer->readPtr > 0;
+	return buffer->writePtr - buffer->readPtr > 0;
 }
 
 inline uint8_t * getWritePtr(bufferADT buffer, size_t * availableSize)

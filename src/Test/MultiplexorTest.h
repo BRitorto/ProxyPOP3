@@ -3,7 +3,7 @@
 
 #include "CuTest.h"
 
-CuSuite * getMultiplexoTest(void);
+CuSuite * getMultiplexorTest(void);
 
 void testEnsureCapacity (CuTest * tc);
 

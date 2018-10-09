@@ -108,7 +108,25 @@ fail:
     }
 }
 
-/**
+/*
+static void copyInit(const unsigned state, MultiplexorKey key) {
+    copy * d = &ATTACHMENT(key)->client.copy;
+
+    d->fd        = &ATTACHMENT(key)->client_fd;
+    d->rb        = &ATTACHMENT(key)->read_buffer;
+    d->wb        = &ATTACHMENT(key)->write_buffer;
+    d->duplex    = OP_READ | OP_WRITE;
+    d->other     = &ATTACHMENT(key)->orig.copy;
+
+    d = &ATTACHMENT(key)->orig.copy;
+    d->fd       = &ATTACHMENT(key)->origin_fd;
+    d->rb       = &ATTACHMENT(key)->write_buffer;
+    d->wb       = &ATTACHMENT(key)->read_buffer;
+    d->duplex   = OP_READ | OP_WRITE;
+    d->other    = &ATTACHMENT(key)->client.copy;
+}
+
+*
  * Computa los intereses en base a la disponiblidad de los buffer.
  * La variable duplex nos permite saber si alguna vía ya fue cerrada.
  * Arrancá OP_READ | OP_WRITE.

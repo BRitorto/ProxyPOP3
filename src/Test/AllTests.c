@@ -2,6 +2,7 @@
 
 #include "CuTest.h"
 #include "MultiplexorTest.h"
+#include "bufferTest.h"
 
 CuSuite* CuGetSuite();
 CuSuite* CuStringGetSuite();
@@ -10,10 +11,11 @@ void RunAllTests(void)
 {
 	CuString *output = CuStringNew();
 	CuSuite* suite = CuSuiteNew();
-
 	CuSuiteAddSuite(suite, CuGetSuite());
-	CuSuiteAddSuite(suite, getMultiplexoTest());
 
+	CuSuiteAddSuite(suite, getMultiplexorTest());
+	CuSuiteAddSuite(suite, getBufferTest());
+	
 	CuSuiteRun(suite);
 	CuSuiteSummary(suite, output);
 	CuSuiteDetails(suite, output);
