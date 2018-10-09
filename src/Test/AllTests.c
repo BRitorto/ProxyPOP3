@@ -1,7 +1,7 @@
 #include <stdio.h>
 
 #include "CuTest.h"
-#include "MultiplexorADTTest.h"
+#include "MultiplexorTest.h"
 
 CuSuite* CuGetSuite();
 CuSuite* CuStringGetSuite();

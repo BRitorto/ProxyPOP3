@@ -2,7 +2,6 @@
 #define MULTIPLEXOR_TEST
 
 #include "CuTest.h"
-//#include "Multiplexor.h"
 
 CuSuite * getMultiplexoTest(void);
 
@@ -13,3 +12,4 @@ void testSelectorRegisterUnregisterRegister(CuTest * tc);
 
 
 #endif
+

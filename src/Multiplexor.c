@@ -1,7 +1,3 @@
-
-
-//Multiplexor.c
-#include "Multiplexor.h"
 #include <assert.h>  
 #include <stdio.h>  
 #include <string.h> 
@@ -14,6 +10,9 @@
 #include <sys/socket.h>
 #include <sys/select.h>
 #include <sys/signal.h>
+
+#include "Multiplexor.h"
+#include "errorslib.h"
 
 
 #define USED_FD_TYPE(i) ( ( FD_UNUSED != (i)->fd) )

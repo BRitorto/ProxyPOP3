@@ -5,8 +5,7 @@
 #include <stdarg.h>
 #include "errorslib.h"
 #include "processlib.h"
-
-pid_t * childFactory(int qty, char * childName)
+/*pid_t * childFactory(int qty, char * childName)
 {
 	pid_t * children = malloc(qty * sizeof(pid_t*));
 
@@ -74,4 +73,4 @@ void freeSpace(int qty, ...)
 
     va_end(args);
 }
-
+*/

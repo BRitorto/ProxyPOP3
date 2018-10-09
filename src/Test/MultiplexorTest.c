@@ -43,18 +43,18 @@ void testEnsureCapacity (CuTest * tc) {
     }
     
     size_t n = 1;
-    CuAssertIntEquals(tc,SUCCESS, ensureCapacity(mux, n));
+    CuAssertIntEquals(tc, MUX_SUCCESS, ensureCapacity(mux, n));
     int cond = n < mux->size;
     CuAssertTrue(tc,  cond);
     
     n = 10;
-    CuAssertIntEquals(tc, SUCCESS, ensureCapacity(mux, n));
+    CuAssertIntEquals(tc, MUX_SUCCESS, ensureCapacity(mux, n));
     cond = n < mux->size;
     CuAssertTrue(tc,  cond);
 
     const size_t lastSize = mux->size;
     n = FDS_MAX_SIZE + 1;
-    CuAssertIntEquals(tc, MAX_FDS, ensureCapacity(mux, n));
+    CuAssertIntEquals(tc, MUX_MAX_FDS, ensureCapacity(mux, n));
     CuAssertIntEquals(tc, lastSize, mux->size);
 
     for(size_t i = 0; i < mux->size; i++) {
@@ -84,7 +84,7 @@ void testRegisterFd (CuTest * tc) {
     MultiplexorADT mux = createMultiplexorADT(INITIAL_SIZE);
     CuAssertPtrNotNull(tc, mux);
 
-    CuAssertIntEquals(tc, INVALID_ARGUMENTS, registerFd(0, -1, 0, 0, dataMark));
+    CuAssertIntEquals(tc, MUX_INVALID_ARGUMENTS, registerFd(0, -1, 0, 0, dataMark));
 
     const eventHandler h = {
         .read   = NULL,
@@ -92,7 +92,7 @@ void testRegisterFd (CuTest * tc) {
         .close  = destroyCallback,
     };
     int fd = FDS_MAX_SIZE - 1;
-    CuAssertIntEquals(tc, SUCCESS,
+    CuAssertIntEquals(tc, MUX_SUCCESS,
                       registerFd(mux, fd, &h, 0, dataMark));
     const fdType * newFdTpe = mux->fds + fd;
     CuAssertIntEquals (tc,fd, mux->maxFd);

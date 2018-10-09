@@ -1,9 +1,12 @@
 /**
 * logger.c - Permite manejar el logging.
 */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 
-#include "logger.h"
 #include <stdio.h>
+#include "logger.h"
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>

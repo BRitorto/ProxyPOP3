@@ -6,7 +6,7 @@ OBJECTS := $(SOURCES:.c=.o)
 rm       = rm -rf
 
 
-all: clean comp link
+all: comp link test run
 
 comp:$(SOURCES)
 	$(CC) $(CFLAGS) $(SOURCES)
@@ -26,5 +26,11 @@ clean:
 	@$(rm) $(OBJECTS)
 	@$(rm) $(OUTPUTS)
 	@echo "Cleanup complete."
+test:
+	cd Test; make all
 
-.PHONY: clean  all  
+run:
+	./Test/AllTests.out
+	./main.out
+
+.PHONY: clean  all  test
