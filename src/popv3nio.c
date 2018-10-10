@@ -61,7 +61,9 @@ static void popv3Block(MultiplexorKey key);
 
 static void popv3Close(MultiplexorKey key);
 
-//static popv3 newPopv3(int clientFd, int originFd, size_t bufferSize, popv3State initialState);
+static popv3 * newPopv3(int clientFd, int originFd, size_t bufferSize);
+
+static void deletePopv3(popv3 * p);
 
 static void copyInit(const unsigned state, MultiplexorKey key);
 
@@ -100,7 +102,7 @@ static void popv3Block(MultiplexorKey key) {
 }
 
 static void popv3Close(MultiplexorKey key) {
-
+    deletePopv3(ATTACHMENT(key));
 }
 
 /**
@@ -109,8 +111,8 @@ static void popv3Close(MultiplexorKey key) {
  * Como tenemos un unico hilo que emite eventos no necesitamos barreras de
  * contención.
  */
-static const unsigned  max_pool  = 50; // tamaño máximo
-static unsigned        pool_size = 0;  // tamaño actual
+static const unsigned  maxPool  = 50; // tamaño máximo
+static unsigned        poolSize = 0;  // tamaño actual
 static struct popv3  * pool      = 0;  // pool propiamente dicho
 
 static popv3 * newPopv3(int clientFd, int originFd, size_t bufferSize) {
@@ -138,6 +140,24 @@ static popv3 * newPopv3(int clientFd, int originFd, size_t bufferSize) {
 finally:
     return ret;
 }
+
+static void deletePopv3(popv3 * p) {
+    if(p != NULL) {
+        if(p->references == 1) {
+            if(poolSize < maxPool) {
+                p->next = pool;
+                pool    = p;
+                poolSize++;
+            } else {
+                free(p);
+            }
+        } else {
+        p->references -= 1;
+        }
+    } 
+}
+
+
 
 void popv3PassiveAccept(MultiplexorKey key) {
 
@@ -168,8 +188,8 @@ void popv3PassiveAccept(MultiplexorKey key) {
     popv3 * p = newPopv3(client, originFd, BUFFER_SIZE);
 
     /// borrar
-    pool_size++;
-    int i = max_pool;
+    poolSize++;
+    int i = maxPool;
     i++;
     ///
 
