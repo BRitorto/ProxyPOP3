@@ -157,18 +157,16 @@ static void deletePopv3(popv3 * p) {
     } 
 }
 
-
-
 void popv3PassiveAccept(MultiplexorKey key) {
 
     struct sockaddr_storage       client_addr;
     socklen_t                     client_addr_len = sizeof(client_addr);
 
-    const int client = accept(key->fd, (struct sockaddr*) &client_addr, &client_addr_len);
-    if(client == -1) {
+    const int clientFd = accept(key->fd, (struct sockaddr*) &client_addr, &client_addr_len);
+    if(clientFd == -1) {
         goto fail;
     }
-    if(fdSetNIO(client) == -1) {
+    if(fdSetNIO(clientFd) == -1) {
         goto fail;
     }
     logInfo("Accepting new client from: ");
@@ -185,26 +183,20 @@ void popv3PassiveAccept(MultiplexorKey key) {
     }
     /////
 
-    popv3 * p = newPopv3(client, originFd, BUFFER_SIZE);
+    popv3 * p = newPopv3(clientFd, originFd, BUFFER_SIZE);
 
-    /// borrar
-    poolSize++;
-    int i = maxPool;
-    i++;
-    ///
-
-    if(MUX_SUCCESS != registerFd(key->mux, client, &popv3Handler, READ, p)) {
+    if(MUX_SUCCESS != registerFd(key->mux, clientFd, &popv3Handler, READ, p)) {
         goto fail;
     }
     if(MUX_SUCCESS != registerFd(key->mux, originFd, &popv3Handler, READ, p)) { //READ QUIERO SI ME DA MENSAJE DE +OK DEVOLVERLO
         goto fail;
     }
-    logInfo("Connection established, client fd: %d, origin fd:%d", client, originFd);
+    logInfo("Connection established, client fd: %d, origin fd:%d", clientFd, originFd);
 
     return ;
 fail:
-    if(client != -1) {
-        close(client);
+    if(clientFd != -1) {
+        close(clientFd);
     }
 }
 
@@ -255,8 +247,6 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
     copy * d = copyPtr(key);
     checkAreEquals(*d->fd, key->fd, "Copy destination and source have the same fd");
 
-    logInfo("Copping from %s", (*d->fd == ATTACHMENT(key)->clientFd)? "client to server" : "server to client");
-
     size_t size;
     ssize_t n;
     bufferADT buffer = d->readBuffer;
@@ -274,7 +264,8 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
     } else {
         updateWritePtr(buffer, n);
     }
-    logInfo("Total copied: %lu bytes", n);
+
+    logMetric("Coppied from %s, total copied: %lu bytes", (*d->fd == ATTACHMENT(key)->clientFd)? "client to server" : "server to client", n);
 
     copyComputeInterests(key->mux, d);
     copyComputeInterests(key->mux, d->other);

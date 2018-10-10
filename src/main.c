@@ -27,6 +27,7 @@
 
 #include "Multiplexor.h"
 #include "logger.h"
+#include "errorslib.h"
 #include "popv3nio.h"
 
 static bool done = false;

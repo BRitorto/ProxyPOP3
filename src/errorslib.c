@@ -4,82 +4,49 @@
 #include "logger.h"
 #include "errorslib.h"
 
+static const char * msgError[] = {
+	"Check fail, more details in next line.",
+	"Check failed: null pointer expected, more details in next line.",
+	"Check failed: null pointer received, more details in next line.",
+	"Check failed: equals numbers expected, more details in next line.",
+	"Check failed: differents numbers expected, more details in next line.",
+};
 
-static inline void finally(const char * file, int line, const char * fmt, va_list args) {
+
+static inline void fatalFinally(const char * file, int line, const char * fmt, va_list args) {
 	fflush(stdout);
 	vlogLogger(LOG_LEVEL_FATAL, file, line, fmt, args);
 	va_end(args);
 	exit(1);
 }
 
-void vfail(const char * file, int line, const char * fmt, ...) {
+void inFail(const char * file, int line, const char * fmt, ...) {		
 	va_list args;
 
 	va_start(args, fmt);
-	finally(file, line, fmt, args);
+	fatalFinally(file, line, fmt, args);
 }
 
-void vcheckFail(int aNumber, const char * file, int line, const char * fmt, ...) {
-	if (aNumber < 0) {
+void checkCondition(checkType type, int condition, const char * file, int line, const char * fmt, ...) {
+	if (!condition) {
 		va_list args;
-		logFatal("Failed, receive: %d, more details in next line:", aNumber);
 
+		logFatal(msgError[type]);
 		va_start(args, fmt);
-		finally(file, line, fmt, args);
+		fatalFinally(file, line, fmt, args);
 	}
 }
 
-void vcheckIsNotNull(void * aPointer, const char * file, int line, const char * fmt, ...) {
-	if(aPointer == (void *) 0) {
-		va_list args;
-		logFatal("Failed: null pointer received, more details in next line:", aPointer);
+void checkConditionWithFinally(checkType type, int condition, finallyFunc finally, void * data, const char * file, int line, const char * fmt, ...) {
+	if (!condition) {
+		va_list args;		
+		
+		logFatal(msgError[type]);
 
 		va_start(args, fmt);
-		finally(file, line, fmt, args);
+		vlogLogger(LOG_LEVEL_FATAL, file, line, fmt, args);
+		va_end(args);
+		finally(data);
 	}
 }
-
-void vcheckIsNull(void * aPointer, const char * file, int line, const char * fmt, ...) {
-	if(aPointer != (void *) 0) {
-		va_list args;
-		logFatal("Failed: null pointer expected, received: %d, more details in next line:", aPointer);
-
-		va_start(args, fmt);
-		finally(file, line, fmt, args);
-	}
-}
-
-void vcheckAreEquals(int aNumber, int otherNumber, const char * file, int line, const char * fmt, ...) {
-	if(aNumber != otherNumber) {
-		va_list args;
-		logFatal("Failed: equals numbers expected, receive: %d and %d, more details in next line:", aNumber, otherNumber);
-
-		va_start(args, fmt);
-		finally(file, line, fmt, args);
-	}
-}
-
-void vcheckAreNotEquals(int aNumber, int otherNumber, const char * file, int line, const char * fmt, ...) {
-	if(aNumber == otherNumber) {
-		va_list args;
-		logFatal("Failed: differents numbers expected, receive: %d and %d, more details in next line:", aNumber, otherNumber);
-
-		va_start(args, fmt);
-		finally(file, line, fmt, args);
-	}
-}
-
-/*
-int main() {
-	loggerSetColor(true);
-	loggerSetQuiet(false);
-	loggerSetColor(true);
-	loggerSetLevel(LOG_LEVEL_TRACE);
-	int fds[] = {-1, -1, -1, -1, -1, -1, -1};
-	loggerSetFdsByLevel(fds);	
-	logTrace("Hello %s", "world");
-	checkFail(0, "No deberia");
-	checkFail(-1, "Deberia %d", -1);
-}
-*/
 

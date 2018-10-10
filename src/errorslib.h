@@ -5,20 +5,33 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
+typedef enum checkType {
+	CHECK_FAIL   		= 0,
+	CHECK_IS_NULL 	  	= 1,
+	CHECK_NOT_NULL 	  	= 2,
+	CHECK_EQUALS 		= 3,
+	CHECK_NOT_EQUALS	= 4,
+} checkType;
 
-#define fail(...)                                       vfail(                                __FILE__, __LINE__, __VA_ARGS__)
-#define checkFail(aNumber, ...)                         vcheckFail(aNumber,                   __FILE__, __LINE__, __VA_ARGS__)
-#define checkIsNotNull(aPointer, ...)                   vcheckIsNotNull(aPointer,             __FILE__, __LINE__, __VA_ARGS__)
-#define checkIsNull(aPointer, ...)                      vcheckIsNull(aPointer,                __FILE__, __LINE__, __VA_ARGS__)
-#define checkAreEquals(aNumber, otherNumber, ...)       vcheckAreEquals(aNumber, otherNumber, __FILE__, __LINE__, __VA_ARGS__)
-#define checkAreNotEquals(aNumber, otherNumber, ...)    vcheckAreNotEquals(aNumber, otherNumber, __FILE__, __LINE__, __VA_ARGS__)
+typedef void (* finallyFunc) (void *);
 
-void vfail(const char * file, int line, const char * fmt, ...);
-void vcheckFail(int aNumber, const char * file, int line, const char * fmt, ...);
-void vcheckIsNotNull(void * aPointer, const char * file, int line, const char * fmt, ...);
-void vcheckIsNull(void * aPointer, const char * file, int line, const char * fmt, ...);
-void vcheckAreEquals(int aNumber, int otherNumber, const char * file, int line, const char * fmt, ...);
-void vcheckAreNotEquals(int aNumber, int otherNumber, const char * file, int line, const char * fmt, ...);
+#define fail(...) inFail(__FILE__, __LINE__, __VA_ARGS__)
+
+#define checkFail(aNumber, ...)                         checkCondition(CHECK_FAIL,         aNumber  >= 0,           __FILE__, __LINE__, __VA_ARGS__)
+#define checkIsNull(aPointer, ...)                      checkCondition(CHECK_IS_NULL,      aPointer == 0,           __FILE__, __LINE__, __VA_ARGS__)
+#define checkIsNotNull(aPointer, ...)                   checkCondition(CHECK_NOT_NULL,     aPointer != 0,           __FILE__, __LINE__, __VA_ARGS__)
+#define checkAreEquals(aNumber, otherNumber, ...)       checkCondition(CHECK_EQUALS,       aNumber  == otherNumber, __FILE__, __LINE__, __VA_ARGS__)
+#define checkAreNotEquals(aNumber, otherNumber, ...)    checkCondition(CHECK_NOT_EQUALS,   aNumber  != otherNumber, __FILE__, __LINE__, __VA_ARGS__)
+
+#define checkFailWithFinally(aNumber, finally, data, ...)                         checkConditionWithFinally(CHECK_FAIL,         aNumber  >= 0,         , finally, data, __FILE__, __LINE__, __VA_ARGS__)
+#define checkIsNullWithFinally(aPointer, finally, data, ...)                      checkConditionWithFinally(CHECK_IS_NULL,      aPointer == 0,         , finally, data, __FILE__, __LINE__, __VA_ARGS__)
+#define checkIsNotNullWithFinally(aPointer, finally, data, ...)                   checkConditionWithFinally(CHECK_NOT_NULL,     aPointer != 0,         , finally, data, __FILE__, __LINE__, __VA_ARGS__)
+#define checkAreEqualsWithFinally(aNumber, finally, data, otherNumber, ...)       checkConditionWithFinally(CHECK_EQUALS,       aNumber  == otherNumber, finally, data, __FILE__, __LINE__, __VA_ARGS__)
+#define checkAreNotEqualsWithFinally(aNumber, finally, data, otherNumber, ...)    checkConditionWithFinally(CHECK_NOT_EQUALS,   aNumber  != otherNumber, finally, data, __FILE__, __LINE__, __VA_ARGS__)
+
+void inFail(const char * file, int line, const char * fmt, ...);
+void checkCondition(checkType type, int condition, const char * file, int line, const char * fmt, ...);
+void checkConditionWithFinally(checkType type, int condition, finallyFunc finally, void * data, const char * file, int line, const char * fmt, ...);
 
 #endif
 
