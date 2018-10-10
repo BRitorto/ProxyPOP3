@@ -59,3 +59,27 @@ void vcheckAreEquals(int aNumber, int otherNumber, const char * file, int line, 
 	}
 }
 
+void vcheckAreNotEquals(int aNumber, int otherNumber, const char * file, int line, const char * fmt, ...) {
+	if(aNumber == otherNumber) {
+		va_list args;
+		logFatal("Failed: differents numbers expected, receive: %d and %d, more details in next line:", aNumber, otherNumber);
+
+		va_start(args, fmt);
+		finally(file, line, fmt, args);
+	}
+}
+
+/*
+int main() {
+	loggerSetColor(true);
+	loggerSetQuiet(false);
+	loggerSetColor(true);
+	loggerSetLevel(LOG_LEVEL_TRACE);
+	int fds[] = {-1, -1, -1, -1, -1, -1, -1};
+	loggerSetFdsByLevel(fds);	
+	logTrace("Hello %s", "world");
+	checkFail(0, "No deberia");
+	checkFail(-1, "Deberia %d", -1);
+}
+*/
+

@@ -14,11 +14,14 @@
 
 #include "popv3nio.h"
 #include "buffer.h"
+#include "logger.h"
+#include "errorslib.h"
 #include "Multiplexor.h"
 
 #define BUFFER_SIZE 2048
 
 typedef enum popv3State {
+    CONNECTING,
     AUTHORIZATION,
     TRANSACTION,
     UPDATE,
@@ -43,6 +46,11 @@ typedef struct popv3 {
     bufferADT writeBuffer;
     copy clientCopy;
     copy originCopy;
+
+    /** cantidad de referencias a este objeto. si es uno se debe destruir */
+    unsigned references;
+    /** siguiente en el pool */
+    struct popv3 * next;
 } popv3;
 
 static void popv3Read(MultiplexorKey key);
@@ -55,15 +63,15 @@ static void popv3Close(MultiplexorKey key);
 
 //static popv3 newPopv3(int clientFd, int originFd, size_t bufferSize, popv3State initialState);
 
-//static void copyInit(const unsigned state, MultiplexorKey key);
+static void copyInit(const unsigned state, MultiplexorKey key);
 
-//static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d);
+static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d);
 
-//static copy * copyPtr(MultiplexorKey key);
+static copy * copyPtr(MultiplexorKey key);
 
-//static unsigned copyReadAndQueue(MultiplexorKey key);
+static unsigned copyReadAndQueue(MultiplexorKey key);
 
-//static unsigned copyWrite(MultiplexorKey key);
+static unsigned copyWrite(MultiplexorKey key);
 
 
 static const eventHandler popv3Handler = {
@@ -73,22 +81,18 @@ static const eventHandler popv3Handler = {
     .close  = popv3Close,
 };
 
-static void popv3Read(MultiplexorKey key) {
-    /* echo server
-    int fd = key->fd;
-    char buffer[256];
-    memset(buffer, 0, 256);
-    recv(fd, buffer, 256, 0);
-    printf("%s",buffer);
-    send(fd, buffer, 256, MSG_NOSIGNAL);*/
-    //copyInit(COPY, key);
-    //copyReadAndQueue(key);
+#define ATTACHMENT(key) ( (struct popv3 *)(key)->data)
 
+static void popv3Read(MultiplexorKey key) {
+    logInfo("Starting to copy");
+    copyInit(COPY, key);
+    copyReadAndQueue(key);
+    logInfo("Finishing copy");
 }
 
 static void popv3Write(MultiplexorKey key) {
-    //copyInit(COPY, key);
-    //copyWrite(key);
+    copyInit(COPY, key);
+    copyWrite(key);
 }
 
 static void popv3Block(MultiplexorKey key) {
@@ -99,17 +103,41 @@ static void popv3Close(MultiplexorKey key) {
 
 }
 
+/**
+ * Pool de `struct popv3', para ser reusados.
+ *
+ * Como tenemos un unico hilo que emite eventos no necesitamos barreras de
+ * contención.
+ */
+static const unsigned  max_pool  = 50; // tamaño máximo
+static unsigned        pool_size = 0;  // tamaño actual
+static struct popv3  * pool      = 0;  // pool propiamente dicho
 
-/*static popv3 newPopv3(int clientFd, int originFd, size_t bufferSize, popv3State initialState) {
-    struct popv3 p;
-    p.state = initialState;
-    p.originFd = originFd;
-    p.clientFd = clientFd;
-    p.readBuffer = createBuffer(bufferSize);
-    p.writeBuffer = createBuffer(bufferSize);
-    return p;
-}*/
+static popv3 * newPopv3(int clientFd, int originFd, size_t bufferSize) {
+   
+    struct popv3 * ret;
+    if(pool == NULL) {
+        ret = malloc(sizeof(*ret));
+    } else {
+        ret       = pool;
+        pool      = pool->next;
+        ret->next = 0;
+    }
+    if(ret == NULL) {
+        goto finally;
+    }
+    memset(ret, 0x00, sizeof(*ret));
 
+    ret->state = COPY;
+    ret->clientFd = clientFd;
+    ret->originFd = originFd;
+    ret->readBuffer = createBuffer(BUFFER_SIZE);
+    ret->writeBuffer = createBuffer(BUFFER_SIZE);
+    
+    ret->references = 1;
+finally:
+    return ret;
+}
 
 void popv3PassiveAccept(MultiplexorKey key) {
 
@@ -123,34 +151,45 @@ void popv3PassiveAccept(MultiplexorKey key) {
     if(fdSetNIO(client) == -1) {
         goto fail;
     }
-        fprintf(stdout,"clientfd:%d originFd:%d\n",client, *((int *)key->data));
+    logInfo("Accepting new client from: ");
+    
+    ////connecting to server
+    originServerAddr originAddr = *((originServerAddr *) key->data);
+    int originFd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if(originFd == -1) {
+        exit(1);
+    }
+    if(connect(originFd, (struct sockaddr *) &originAddr.ipv4, sizeof(originAddr.ipv4)) == -1) {
+        logFatal("imposible conectar con el servidor origen");
+        exit(1); //ACA DEBERIAMOS IR A UN ESTADO
+    }
+    /////
 
+    popv3 * p = newPopv3(client, originFd, BUFFER_SIZE);
 
-    popv3 p;
-        memset(&p, 0x00, sizeof(p));
+    /// borrar
+    pool_size++;
+    int i = max_pool;
+    i++;
+    ///
 
-    p.state = COPY;
-    p.originFd = *((int *)key->data);
-    p.clientFd = client;
-    p.readBuffer = createBuffer(BUFFER_SIZE);
-    p.writeBuffer = createBuffer(BUFFER_SIZE); 
-    //= newPopv3(client, *((int *)key->data), BUFFER_SIZE, COPY);
-
-
-    if(MUX_SUCCESS != registerFd(key->mux, client, &popv3Handler, READ, &p)) {
+    if(MUX_SUCCESS != registerFd(key->mux, client, &popv3Handler, READ, p)) {
         goto fail;
     }
+    if(MUX_SUCCESS != registerFd(key->mux, originFd, &popv3Handler, READ, p)) { //READ QUIERO SI ME DA MENSAJE DE +OK DEVOLVERLO
+        goto fail;
+    }
+    logInfo("Connection established, client fd: %d, origin fd:%d", client, originFd);
+
     return ;
 fail:
     if(client != -1) {
         close(client);
     }
 }
-/*
 
 static void copyInit(const unsigned state, MultiplexorKey key) {
-    struct popv3 * p = (struct popv3 *)(key->data);
-    fprintf(stdout,"En init clientfd:%d originFd:%d\n",p->clientFd, p->originFd);
+    struct popv3 * p = ATTACHMENT(key);
 
     copy * d        = &(p->clientCopy);
     d->fd           = &(p->clientFd);
@@ -182,11 +221,11 @@ static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d) {
 }
 
 static copy * copyPtr(MultiplexorKey key) {
-    popv3 * p = (struct popv3 *)(key->data);
-    copy * d = &(p->clientCopy);
-    fprintf(stdout, "En copyptr %d y keyfd:%d\n", *d->fd, key->fd);
+    copy * d = &(ATTACHMENT(key)->clientCopy);
 
-    if(*d->fd != key->fd) {
+    if(*d->fd == key->fd) {
+        // ok
+    } else {
         d = d->other;
     }
     return  d;
@@ -194,8 +233,9 @@ static copy * copyPtr(MultiplexorKey key) {
 
 static unsigned copyReadAndQueue(MultiplexorKey key) {
     copy * d = copyPtr(key);
-    fprintf(stdout, "%d y %d\n", *d->fd, key->fd);
-    assert(*d->fd == key->fd);
+    checkAreEquals(*d->fd, key->fd, "Copy destination and source have the same fd");
+
+    logInfo("Copping from %s", (*d->fd == ATTACHMENT(key)->clientFd)? "client to server" : "server to client");
 
     size_t size;
     ssize_t n;
@@ -214,6 +254,8 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
     } else {
         updateWritePtr(buffer, n);
     }
+    logInfo("Total copied: %lu bytes", n);
+
     copyComputeInterests(key->mux, d);
     copyComputeInterests(key->mux, d->other);
     if(d->duplex == NO_INTEREST) {
@@ -235,7 +277,7 @@ static unsigned copyWrite(MultiplexorKey key) {
     if(n == -1) {
         shutdown(*d->fd, SHUT_WR);
         d->duplex &= ~WRITE;
-        if(*d->other->fd != -1) {
+        if(*d->other->fd != -1) {                       //shutdeteo tanto socket cliente como servidor
             shutdown(*d->other->fd, SHUT_RD);
             d->other->duplex &= ~READ;
         }
@@ -248,5 +290,5 @@ static unsigned copyWrite(MultiplexorKey key) {
         ret = DONE;
     }
     return ret;
-}*/
+}
 

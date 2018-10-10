@@ -26,6 +26,7 @@
 #include <arpa/inet.h>
 
 #include "Multiplexor.h"
+#include "logger.h"
 #include "popv3nio.h"
 
 static bool done = false;
@@ -37,25 +38,15 @@ sigtermHandler(const int signal) {
 }
 
 int main(const int argc, const char **argv) {
-    unsigned port = 1110;
-    close(0);
-    /*in_port_t originPort = 110;
-    originServerAddr originAddr;
-    int originFd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if(originFd == -1){
-        exit(1);
-    }
-    memset(&(originAddr.ipv4), 0, sizeof(originAddr.ipv4));
-    originAddr.ipv4.sin_family = AF_INET;
-    originAddr.ipv4.sin_port = htons(originPort); 
-    if(inet_pton(AF_INET, "127.0.0.1", &originAddr.ipv4.sin_addr.s_addr) <= 0) {
-        // si devuelve 0 es que el string con la ip es invalido y si devuelve <0 es que fallo
-        exit(1);
-    }
-    if(connect(originFd, (struct sockaddr *) &originAddr.ipv4, sizeof(originAddr.ipv4)) == -1) {
-        exit(1);
-    }*/
+    loggerSetColor(true);
+	loggerSetQuiet(false);
+	loggerSetColor(true);
+	loggerSetLevel(LOG_LEVEL_TRACE);
+	int fds[] = {-1, -1, -1, -1, -1, -1, -1};
+	loggerSetFdsByLevel(fds);	
 
+    unsigned port = 1114;
+    close(0);
 
     const char * err_msg = NULL;
     multiplexorStatus status = MUX_SUCCESS;
@@ -68,14 +59,13 @@ int main(const int argc, const char **argv) {
     addr.sin_port        = htons(port);
 
     const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
     if(server < 0) {
         err_msg = "unable to create socket";
         goto finally;
     }
 
-    fprintf(stdout, "Listening on TCP port %d\n", port);
-
-
+    logInfo("Listening on TCP port %d", port);
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
 
     if(bind(server, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
@@ -87,6 +77,7 @@ int main(const int argc, const char **argv) {
         err_msg = "unable to listen";
         goto finally;
     }
+
     signal(SIGTERM, sigtermHandler);
     signal(SIGINT,  sigtermHandler);
 
@@ -118,11 +109,28 @@ int main(const int argc, const char **argv) {
         .close      = NULL, // nada que liberar por ahora
     };
 
-    status = registerFd(mux, server, &popv3, READ, NULL);
+    ///////datos de origin harcodeados
+    in_port_t originPort = 110;
+    originServerAddr originAddr;
+    memset(&(originAddr.ipv4), 0, sizeof(originAddr.ipv4));
+
+    originAddr.ipv4.sin_family = AF_INET;
+    originAddr.ipv4.sin_port = htons(originPort); 
+    if(inet_pton(AF_INET, "127.0.0.1", &originAddr.ipv4.sin_addr.s_addr) <= 0) {
+        // si devuelve 0 es que el string con la ip es invalido y si devuelve <0 es que fallo
+        goto finally;
+    }
+    ////////
+
+    logInfo("Ready to register passive socket in fd: %d", server);
+
+    status = registerFd(mux, server, &popv3, READ, &originAddr);
     if(status != MUX_SUCCESS) {
         err_msg = "registering fd";
         goto finally;
     }
+    logInfo("Passive socket registered in fd: %d", server);
+
     for(;!done;) {
         err_msg = NULL;
         status = muxSelect(mux);

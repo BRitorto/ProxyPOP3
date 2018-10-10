@@ -7,7 +7,7 @@ typedef union originServerAddr {
     char fqdn[0xFF];
     struct sockaddr_in  ipv4;
     struct sockaddr_in6 ipv6;
-}originServerAddr;
+} originServerAddr;
 
 void popv3PassiveAccept(MultiplexorKey key);
 
