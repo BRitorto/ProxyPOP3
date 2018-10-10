@@ -53,17 +53,17 @@ static void popv3Block(MultiplexorKey key);
 
 static void popv3Close(MultiplexorKey key);
 
-static popv3 newPopv3(int clientFd, int originFd, size_t bufferSize, popv3State initialState);
+//static popv3 newPopv3(int clientFd, int originFd, size_t bufferSize, popv3State initialState);
 
-static void copyInit(const unsigned state, MultiplexorKey key);
+//static void copyInit(const unsigned state, MultiplexorKey key);
 
-static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d);
+//static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d);
 
-static copy * copyPtr(MultiplexorKey key);
+//static copy * copyPtr(MultiplexorKey key);
 
-static unsigned copyReadAndQueue(MultiplexorKey key);
+//static unsigned copyReadAndQueue(MultiplexorKey key);
 
-static unsigned copyWrite(MultiplexorKey key);
+//static unsigned copyWrite(MultiplexorKey key);
 
 
 static const eventHandler popv3Handler = {
@@ -81,14 +81,14 @@ static void popv3Read(MultiplexorKey key) {
     recv(fd, buffer, 256, 0);
     printf("%s",buffer);
     send(fd, buffer, 256, MSG_NOSIGNAL);*/
-    copyInit(COPY, key);
-    copyReadAndQueue(key);
+    //copyInit(COPY, key);
+    //copyReadAndQueue(key);
 
 }
 
 static void popv3Write(MultiplexorKey key) {
-    copyInit(COPY, key);
-    copyWrite(key);
+    //copyInit(COPY, key);
+    //copyWrite(key);
 }
 
 static void popv3Block(MultiplexorKey key) {
@@ -100,16 +100,15 @@ static void popv3Close(MultiplexorKey key) {
 }
 
 
-static popv3 newPopv3(int clientFd, int originFd, size_t bufferSize, popv3State initialState) {
-    struct popv3 p = {
-        .state = initialState,
-        .originFd = originFd,
-        .clientFd = clientFd,
-        .readBuffer = createBuffer(bufferSize),
-        .writeBuffer = createBuffer(bufferSize),
-    }; 
+/*static popv3 newPopv3(int clientFd, int originFd, size_t bufferSize, popv3State initialState) {
+    struct popv3 p;
+    p.state = initialState;
+    p.originFd = originFd;
+    p.clientFd = clientFd;
+    p.readBuffer = createBuffer(bufferSize);
+    p.writeBuffer = createBuffer(bufferSize);
     return p;
-}
+}*/
 
 
 void popv3PassiveAccept(MultiplexorKey key) {
@@ -124,8 +123,18 @@ void popv3PassiveAccept(MultiplexorKey key) {
     if(fdSetNIO(client) == -1) {
         goto fail;
     }
+        fprintf(stdout,"clientfd:%d originFd:%d\n",client, *((int *)key->data));
 
-    popv3 p = newPopv3(client, *((int *)key->data), BUFFER_SIZE, COPY);
+
+    popv3 p;
+        memset(&p, 0x00, sizeof(p));
+
+    p.state = COPY;
+    p.originFd = *((int *)key->data);
+    p.clientFd = client;
+    p.readBuffer = createBuffer(BUFFER_SIZE);
+    p.writeBuffer = createBuffer(BUFFER_SIZE); 
+    //= newPopv3(client, *((int *)key->data), BUFFER_SIZE, COPY);
 
 
     if(MUX_SUCCESS != registerFd(key->mux, client, &popv3Handler, READ, &p)) {
@@ -137,37 +146,33 @@ fail:
         close(client);
     }
 }
-
+/*
 
 static void copyInit(const unsigned state, MultiplexorKey key) {
-    popv3 * p = (struct popv3 *)(key->data);
-    copy * d        = &p->clientCopy;
+    struct popv3 * p = (struct popv3 *)(key->data);
+    fprintf(stdout,"En init clientfd:%d originFd:%d\n",p->clientFd, p->originFd);
 
-    d->fd           = &p->clientFd;
+    copy * d        = &(p->clientCopy);
+    d->fd           = &(p->clientFd);
     d->readBuffer   = p->readBuffer;
     d->writeBuffer  = p->writeBuffer;
     d->duplex       = READ | WRITE;
-    d->other        = &p->originCopy;
+    d->other        = &(p->originCopy);
 
-    d               = &p->originCopy;
-    d->fd           = &p->originFd;
+    d               = &(p->originCopy);
+    d->fd           = &(p->originFd);
     d->readBuffer   = p->writeBuffer;
     d->writeBuffer  = p->readBuffer;
     d->duplex       = READ | WRITE;
-    d->other        = &p->clientCopy;
+    d->other        = &(p->clientCopy);
 }
 
-/**
- * Computa los intereses en base a la disponiblidad de los buffer.
- * La variable duplex nos permite saber si alguna vía ya fue cerrada.
- * Arrancá READ | WRITE.
- */
 static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d) {
     fdInterest ret = NO_INTEREST;
     if ((d->duplex & READ)  && canWrite(d->readBuffer)) {
         ret |= READ;
     }
-    if ((d->duplex & WRITE) && canRead (d->writeBuffer)) {
+    if ((d->duplex & WRITE) && canRead(d->writeBuffer)) {
         ret |= WRITE;
     }
     if(MUX_SUCCESS != setInterest(mux, *d->fd, ret)) {
@@ -176,10 +181,11 @@ static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d) {
     return ret;
 }
 
-/** elige la estructura de copia correcta de cada fd (origin o client) */
 static copy * copyPtr(MultiplexorKey key) {
     popv3 * p = (struct popv3 *)(key->data);
-    copy * d = &p->clientCopy;
+    copy * d = &(p->clientCopy);
+    fprintf(stdout, "En copyptr %d y keyfd:%d\n", *d->fd, key->fd);
+
     if(*d->fd != key->fd) {
         d = d->other;
     }
@@ -188,7 +194,7 @@ static copy * copyPtr(MultiplexorKey key) {
 
 static unsigned copyReadAndQueue(MultiplexorKey key) {
     copy * d = copyPtr(key);
-
+    fprintf(stdout, "%d y %d\n", *d->fd, key->fd);
     assert(*d->fd == key->fd);
 
     size_t size;
@@ -242,5 +248,5 @@ static unsigned copyWrite(MultiplexorKey key) {
         ret = DONE;
     }
     return ret;
-}
+}*/
 

@@ -38,8 +38,8 @@ sigtermHandler(const int signal) {
 
 int main(const int argc, const char **argv) {
     unsigned port = 1110;
-
-    in_port_t originPort = 110;
+    close(0);
+    /*in_port_t originPort = 110;
     originServerAddr originAddr;
     int originFd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if(originFd == -1){
@@ -54,9 +54,8 @@ int main(const int argc, const char **argv) {
     }
     if(connect(originFd, (struct sockaddr *) &originAddr.ipv4, sizeof(originAddr.ipv4)) == -1) {
         exit(1);
-    }
-    
-    close(0);
+    }*/
+
 
     const char * err_msg = NULL;
     multiplexorStatus status = MUX_SUCCESS;
@@ -119,7 +118,7 @@ int main(const int argc, const char **argv) {
         .close      = NULL, // nada que liberar por ahora
     };
 
-    status = registerFd(mux, server, &popv3, READ, &originFd);
+    status = registerFd(mux, server, &popv3, READ, NULL);
     if(status != MUX_SUCCESS) {
         err_msg = "registering fd";
         goto finally;
