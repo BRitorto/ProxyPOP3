@@ -1,5 +1,15 @@
-#compile files
+#Binary Files
+*.bin
+*.sys
+*.out
+
+#Images Files
+*.img
+*.qcow2
+*.vmdk
+
+#Object Files
 *.o
 
-#logs
+#Log Files
 *.log
