@@ -17,7 +17,7 @@
 #include "logger.h"
 #include "errorslib.h"
 #include "Multiplexor.h"
-#include "stm.h"
+#include "stateMachine.h"
 
 #define BUFFER_SIZE 2048
 
@@ -49,7 +49,7 @@ typedef struct proxyPopv3 {
     copy originCopy;
 
     /** maquinas de estados */
-    struct state_machine stm;
+    struct stateMachineCDT stm;
 
     /** cantidad de referencias a este objeto. si es uno se debe destruir */
     unsigned references;
@@ -82,7 +82,7 @@ static unsigned copyReadAndQueue(MultiplexorKey key);
 
 static unsigned copyWrite(MultiplexorKey key);
 
-static const struct state_definition * proxyPopv3DescribeStates(void);
+static const struct stateDefinition * proxyPopv3DescribeStates(void);
 
 
 static const eventHandler proxyPopv3Handler = {
@@ -96,8 +96,8 @@ static const eventHandler proxyPopv3Handler = {
 
 static void proxyPopv3Read(MultiplexorKey key) {
     logInfo("Starting to copy");
-    struct state_machine * stm = &ATTACHMENT(key)->stm;
-    const proxyPopv3State state = stm_handler_read(stm, key);
+    stateMachine stm = &ATTACHMENT(key)->stm;
+    const proxyPopv3State state = stateMachineHandlerRead(stm, key);
 
     logDebug("state: %d", state);
     if(ERROR == state || DONE == state) {
@@ -106,8 +106,8 @@ static void proxyPopv3Read(MultiplexorKey key) {
 }
 
 static void proxyPopv3Write(MultiplexorKey key) {
-    struct state_machine * stm = &ATTACHMENT(key)->stm;
-    const proxyPopv3State state = stm_handler_write(stm, key);
+    stateMachine stm = &ATTACHMENT(key)->stm;
+    const proxyPopv3State state = stateMachineHandlerWrite(stm, key);
 
     logInfo("Finishing copy");
 
@@ -172,9 +172,9 @@ static proxyPopv3 * newProxyPopv3(int clientFd, int originFd, size_t bufferSize)
     ret->writeBuffer = createBuffer(bufferSize);
     
     ret->stm    .initial   = COPY;
-    ret->stm    .max_state = ERROR;
+    ret->stm    .maxState = ERROR;
     ret->stm    .states    = proxyPopv3DescribeStates();
-    stm_init(&ret->stm);
+    stateMachineInit(&ret->stm);
 
     ret->references = 1;
 finally:
@@ -350,7 +350,7 @@ static unsigned copyWrite(MultiplexorKey key) {
 }
 
 /* definición de handlers para cada estado */
-static const struct state_definition clientStatbl[] = {
+static const struct stateDefinition clientStatbl[] = {
     /*{
         .state            = CLEAN_TRANSACTION,
         .on_arrival       = hello_read_init,
@@ -361,9 +361,9 @@ static const struct state_definition clientStatbl[] = {
         .on_write_ready   = hello_write,
     },*/ {
         .state            = COPY,
-        .on_arrival       = copyInit,
-        .on_read_ready    = copyReadAndQueue,
-        .on_write_ready   = copyWrite,
+        .onArrival       = copyInit,
+        .onReadReady    = copyReadAndQueue,
+        .onWriteReady   = copyWrite,
     }, {
         .state            = DONE,
 
@@ -372,7 +372,7 @@ static const struct state_definition clientStatbl[] = {
     }
 };
 
-static const struct state_definition * proxyPopv3DescribeStates(void) {
+static const struct stateDefinition * proxyPopv3DescribeStates(void) {
     return clientStatbl;
 }
 

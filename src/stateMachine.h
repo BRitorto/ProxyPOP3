@@ -1,46 +1,46 @@
-#ifndef STM_H_wL7YxN65ZHqKGvCPrNbPtMJgL8B
-#define STM_H_wL7YxN65ZHqKGvCPrNbPtMJgL8B
+#ifndef STATE_MACHINE_H
+#define STATE_MACHINE_H
 
 #include "Multiplexor.h"
 
 /**
- * stm.c - pequeño motor de maquina de estados donde los eventos son los
- *         del selector.c
- *
- * La interfaz es muy simple, y no es un ADT.
+ * stateMachine.h - pequeño motor de maquina de estados donde los eventos son los
+ *         del Multiplexor.c
  *
  * Los estados se identifican con un número entero (típicamente proveniente de
  * un enum).
  *
- *  - El usuario instancia un `struct state_machine'
+ *  - El usuario instancia un `struct stateMachineCDT'
  *  - Describe la maquina de estados:
  *      - describe el estado inicial en `initial'
  *      - todos los posibles estados en `states' (el orden debe coincidir con
  *        el identificador)
  *      - describe la cantidad de estados en `states'.
  *
- * Provee todas las funciones necesitadas en un `struct fd_handler'
- * de selector.c.
+ * Provee todas las funciones necesitadas en un `eventHandler'
+ * de Multiplexor.c.
  */
 
-struct state_machine {
+struct stateMachineCDT {
     /** declaración de cual es el estado inicial */
-    unsigned                      initial;
+    unsigned                            initial;
     /**
      * declaracion de los estados: deben estar ordenados segun .[].state.
      */
-    const struct state_definition *states;
+    const struct stateDefinition *     states;
     /** cantidad de estados */
-    unsigned                      max_state;
+    unsigned                            maxState;
     /** estado actual */
-    const struct state_definition *current;
+    const struct stateDefinition *     current;
 };
+
+typedef struct stateMachineCDT * stateMachine;
 
 
 /**
  * definición de un estado de la máquina de estados
  */
-struct state_definition {
+struct stateDefinition {
     /**
      * identificador del estado: típicamente viene de un enum que arranca
      * desde 0 y no es esparso.
@@ -48,40 +48,34 @@ struct state_definition {
     unsigned state;
 
     /** ejecutado al arribar al estado */
-    void     (*on_arrival)    (const unsigned state, MultiplexorKey key);
+    void     (*onArrival)    (const unsigned state, MultiplexorKey key);
     /** ejecutado al salir del estado */
-    void     (*on_departure)  (const unsigned state, MultiplexorKey key);
+    void     (*onDeparture)  (const unsigned state, MultiplexorKey key);
     /** ejecutado cuando hay datos disponibles para ser leidos */
-    unsigned (*on_read_ready) (MultiplexorKey key);
+    unsigned (*onReadReady) (MultiplexorKey key);
     /** ejecutado cuando hay datos disponibles para ser escritos */
-    unsigned (*on_write_ready)(MultiplexorKey key);
+    unsigned (*onWriteReady)(MultiplexorKey key);
     /** ejecutado cuando hay una resolución de nombres lista */
-    unsigned (*on_block_ready)(MultiplexorKey key);
+    unsigned (*onBlockReady)(MultiplexorKey key);
 };
 
 
 /** inicializa el la máquina */
-void
-stm_init(struct state_machine *stm);
+void stateMachineInit(stateMachine stm);
 
 /** obtiene el identificador del estado actual */
-unsigned
-stm_state        (struct state_machine *stm);
+unsigned getState        (stateMachine stm);
 
 /** indica que ocurrió el evento read. retorna nuevo id de nuevo estado. */
-unsigned
-stm_handler_read(struct state_machine *stm, MultiplexorKey key);
+unsigned stateMachineHandlerRead(stateMachine stm, MultiplexorKey key);
 
 /** indica que ocurrió el evento write. retorna nuevo id de nuevo estado. */
-unsigned
-stm_handler_write(struct state_machine *stm, MultiplexorKey key);
+unsigned stateMachineHandlerWrite(stateMachine stm, MultiplexorKey key);
 
 /** indica que ocurrió el evento block. retorna nuevo id de nuevo estado. */
-unsigned
-stm_handler_block(struct state_machine *stm, MultiplexorKey key);
+unsigned stateMachineHandlerBlock(stateMachine stm, MultiplexorKey key);
 
 /** indica que ocurrió el evento close. retorna nuevo id de nuevo estado. */
-void
-stm_handler_close(struct state_machine *stm, MultiplexorKey key);
+void stateMachineHandlerClose(stateMachine stm, MultiplexorKey key);
 
 #endif
