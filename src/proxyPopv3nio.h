@@ -1,7 +1,7 @@
 #ifndef PROXY_POPV3_NIO_H
 #define PROXY_POPV3_NIO_H
 
-#include "Multiplexor.h"
+#include "multiplexor.h"
 
 typedef union originServerAddr {
     char fqdn[0xFF];

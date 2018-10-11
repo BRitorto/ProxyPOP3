@@ -75,12 +75,13 @@ logStatus vlogLogger(int level, const char * file, int line, const char *fmt, va
 
 	/* Get current time */
 	time_t t = time(NULL);
-	struct tm *lt = localtime(&t);
+	struct tm localTm;
+	struct tm *tm = localtime_r(&t, &localTm);
 
 	/* Log to stderr */
 	if (!logger.quiet) {
 		char buf[64];
-		buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
+		buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", tm)] = '\0';
 		if(logger.color)
 			fprintf(stderr, "%s %s%-6s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
 					buf, levelColors[level], levelNames[level], file, line);
@@ -94,7 +95,7 @@ logStatus vlogLogger(int level, const char * file, int line, const char *fmt, va
 	/* Log to file */
 	if (logger.fdsLevel != NULL && logger.fdsLevel[level] >= 0) {
 		char buf[64];
-		buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
+		buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", tm)] = '\0';
 		dprintf(logger.fdsLevel[level], "%s %-6s %s:%d: ", buf, levelNames[level], file, line);
 		vdprintf(logger.fdsLevel[level], fmt, args);
 		dprintf(logger.fdsLevel[level], "\n");
@@ -116,14 +117,3 @@ logStatus logLogger(int level, const char * file, int line, const char *fmt, ...
 	return retVal;
 }
 
-/*
-int main() {
-	loggerSetColor(true);
-	loggerSetQuiet(false);
-	loggerSetColor(true);
-	loggerSetLevel(LOG_LEVEL_TRACE);
-	int fds[] = {-1, -1, -1, -1, -1, -1, -1};
-	loggerSetFdsByLevel(fds);	
-	logTrace("Hello %s", "world");
-}
-*/

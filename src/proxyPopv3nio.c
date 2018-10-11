@@ -16,7 +16,7 @@
 #include "buffer.h"
 #include "logger.h"
 #include "errorslib.h"
-#include "Multiplexor.h"
+#include "multiplexor.h"
 #include "stateMachine.h"
 
 #define BUFFER_SIZE 2048

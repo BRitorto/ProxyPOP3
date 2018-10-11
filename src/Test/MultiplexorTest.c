@@ -2,9 +2,9 @@
 
 #include "CuTest.h"
 
-#include "MultiplexorTest.h"
+#include "multiplexorTest.h"
 
-#include "Multiplexor.c"
+#include "multiplexor.c"
 
 
 // para poder testear las funciones estaticas

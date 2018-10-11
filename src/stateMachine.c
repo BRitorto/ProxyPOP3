@@ -4,37 +4,30 @@
  */
 #include <stdlib.h>
 #include "stateMachine.h"
-
-#define N(x) (sizeof(x)/sizeof((x)[0]))
+#include "errorslib.h"
 
 void stateMachineInit(stateMachine stm) {
     // verificamos que los estados son correlativos, y que están bien asignados.
     for(unsigned i = 0 ; i <= stm->maxState; i++) {
-        if(i != stm->states[i].state) {
-            abort();
-        }
+        checkAreEquals(i, stm->states[i].state, "Error checking states definition, %d state does not match.", i);
     }
 
-    if(stm->initial < stm->maxState) {
-        stm->current = NULL;
-    } else {
-        abort();
-    }
+    checkGreaterThan(stm->maxState, stm->initial, "Error max state is lower or equals to initial state.");
+    stm->current = NULL;
 }
 
 inline static void handleFirst(stateMachine stm, MultiplexorKey key) {
     if(stm->current == NULL) {
         stm->current = stm->states + stm->initial;
-        if(NULL != stm->current->onArrival) {
+        if(stm->current->onArrival != NULL) {
             stm->current->onArrival(stm->current->state, key);
         }
     }
 }
 
 inline static void jump(stateMachine stm, unsigned next, MultiplexorKey key) {
-    if(next > stm->maxState) {
-        abort();
-    }
+    checkGreaterThan(stm->maxState, next, "Error the next state is grather than max state.");
+   
     if(stm->current != stm->states + next) {
         if(stm->current != NULL && stm->current->onDeparture != NULL) {
             stm->current->onDeparture(stm->current->state, key);
@@ -49,9 +42,8 @@ inline static void jump(stateMachine stm, unsigned next, MultiplexorKey key) {
 
 unsigned stateMachineHandlerRead(stateMachine stm, MultiplexorKey key) {
     handleFirst(stm, key);
-    if(stm->current->onReadReady == 0) {
-        abort();
-    }
+    checkIsNotNull(stm->current->onReadReady, "Null pointer on read ready function.");
+
     const unsigned int ret = stm->current->onReadReady(key);
     jump(stm, ret, key);
 
@@ -60,9 +52,8 @@ unsigned stateMachineHandlerRead(stateMachine stm, MultiplexorKey key) {
 
 unsigned stateMachineHandlerWrite(stateMachine stm, MultiplexorKey key) {
     handleFirst(stm, key);
-    if(stm->current->onWriteReady == 0) {
-        abort();
-    }
+    checkIsNotNull(stm->current->onWriteReady, "Null pointer on write ready function.");
+
     const unsigned int ret = stm->current->onWriteReady(key);
     jump(stm, ret, key);
 
@@ -71,9 +62,8 @@ unsigned stateMachineHandlerWrite(stateMachine stm, MultiplexorKey key) {
 
 unsigned stateMachineHandlerBlock(stateMachine stm, MultiplexorKey key) {
     handleFirst(stm, key);
-    if(stm->current->onBlockReady == 0) {
-        abort();
-    }
+    checkIsNotNull(stm->current->onBlockReady, "Null pointer on block ready function.");
+
     const unsigned int ret = stm->current->onBlockReady(key);
     jump(stm, ret, key);
 

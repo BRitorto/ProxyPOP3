@@ -1,7 +1,7 @@
 #ifndef STATE_MACHINE_H
 #define STATE_MACHINE_H
 
-#include "Multiplexor.h"
+#include "multiplexor.h"
 
 /**
  * stateMachine.h - pequeño motor de maquina de estados donde los eventos son los
@@ -64,7 +64,7 @@ struct stateDefinition {
 void stateMachineInit(stateMachine stm);
 
 /** obtiene el identificador del estado actual */
-unsigned getState        (stateMachine stm);
+unsigned getState(stateMachine stm);
 
 /** indica que ocurrió el evento read. retorna nuevo id de nuevo estado. */
 unsigned stateMachineHandlerRead(stateMachine stm, MultiplexorKey key);

@@ -25,7 +25,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include "Multiplexor.h"
+#include "multiplexor.h"
 #include "logger.h"
 #include "errorslib.h"
 #include "proxyPopv3nio.h"

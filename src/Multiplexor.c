@@ -11,7 +11,7 @@
 #include <sys/select.h>
 #include <sys/signal.h>
 
-#include "Multiplexor.h"
+#include "multiplexor.h"
 #include "errorslib.h"
 
 
@@ -113,9 +113,6 @@ const char * multiplexorError(const multiplexorStatus status) {
     }
     return msg;
 }
-
-
-
 
 multiplexorStatus multiplexorClose(void) {
     // Nada para liberar.

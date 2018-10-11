@@ -10,6 +10,7 @@ static const char * msgError[] = {
 	"Check failed: null pointer received, more details in next line.",
 	"Check failed: equals numbers expected, more details in next line.",
 	"Check failed: differents numbers expected, more details in next line.",
+	"Check failed: greater number expeted, more details in next line.",
 };
 
 

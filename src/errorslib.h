@@ -11,6 +11,7 @@ typedef enum checkType {
 	CHECK_NOT_NULL 	  	= 2,
 	CHECK_EQUALS 		= 3,
 	CHECK_NOT_EQUALS	= 4,
+	CHECK_GREATER_THAN  = 5,
 } checkType;
 
 typedef void (* finallyFunc) (void *);
@@ -22,6 +23,8 @@ typedef void (* finallyFunc) (void *);
 #define checkIsNotNull(aPointer, ...)                   checkCondition(CHECK_NOT_NULL,     aPointer != 0,           __FILE__, __LINE__, __VA_ARGS__)
 #define checkAreEquals(aNumber, otherNumber, ...)       checkCondition(CHECK_EQUALS,       aNumber  == otherNumber, __FILE__, __LINE__, __VA_ARGS__)
 #define checkAreNotEquals(aNumber, otherNumber, ...)    checkCondition(CHECK_NOT_EQUALS,   aNumber  != otherNumber, __FILE__, __LINE__, __VA_ARGS__)
+#define checkGreaterThan(bigNumber, smallNumber, ...)   checkCondition(CHECK_GREATER_THAN, bigNumber > smallNumber, __FILE__, __LINE__, __VA_ARGS__)
+
 
 #define checkFailWithFinally(aNumber, finally, data, ...)                         checkConditionWithFinally(CHECK_FAIL,         aNumber  >= 0,         , finally, data, __FILE__, __LINE__, __VA_ARGS__)
 #define checkIsNullWithFinally(aPointer, finally, data, ...)                      checkConditionWithFinally(CHECK_IS_NULL,      aPointer == 0,         , finally, data, __FILE__, __LINE__, __VA_ARGS__)
