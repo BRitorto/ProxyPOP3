@@ -46,7 +46,7 @@ int main(const int argc, const char **argv) {
 	int fds[] = {-1, -1, -1, -1, -1, -1, -1};
 	loggerSetFdsByLevel(fds);	
 
-    unsigned port = 1114;
+    unsigned port = 1110;
     close(0);
 
     const char * err_msg = NULL;

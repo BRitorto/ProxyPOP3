@@ -24,8 +24,8 @@
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
 typedef enum proxyPopv3State {
-    /*CLEAN_TRANSACTION,
-    TRANSFORM_TRANSACTION,*/
+    CLEAN_TRANSACTION,
+    TRANSFORM_TRANSACTION,
     COPY,
     DONE,
     ERROR,
@@ -351,19 +351,15 @@ static unsigned copyWrite(MultiplexorKey key) {
 
 /* definición de handlers para cada estado */
 static const struct stateDefinition clientStatbl[] = {
-    /*{
+    {
         .state            = CLEAN_TRANSACTION,
-        .on_arrival       = hello_read_init,
-        .on_departure     = hello_read_close,
-        .on_read_ready    = hello_read,
     }, {
         .state            = TRANSFORM_TRANSACTION,
-        .on_write_ready   = hello_write,
-    },*/ {
+    },{
         .state            = COPY,
-        .onArrival       = copyInit,
-        .onReadReady    = copyReadAndQueue,
-        .onWriteReady   = copyWrite,
+        .onArrival        = copyInit,
+        .onReadReady      = copyReadAndQueue,
+        .onWriteReady     = copyWrite,
     }, {
         .state            = DONE,
 
