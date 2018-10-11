@@ -30,6 +30,8 @@
 #include "errorslib.h"
 #include "proxyPopv3nio.h"
 
+#define BACKLOG 20
+
 static bool done = false;
 
 static void
@@ -47,7 +49,9 @@ int main(const int argc, const char **argv) {
 	loggerSetFdsByLevel(fds);	
 
     unsigned port = 1110;
+    unsigned adminPort = 9090;
     close(0);
+
 
     const char * err_msg = NULL;
     multiplexorStatus status = MUX_SUCCESS;
@@ -59,7 +63,15 @@ int main(const int argc, const char **argv) {
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port        = htons(port);
 
+    struct sockaddr_in adminAddr;
+    memset(&adminAddr, 0, sizeof(adminAddr));
+    adminAddr.sin_family      = AF_INET;
+    adminAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    adminAddr.sin_port        = htons(adminPort);
+
+
     const int server = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    const int adminServer = socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP);
 
     if(server < 0) {
         err_msg = "unable to create socket";
@@ -69,13 +81,27 @@ int main(const int argc, const char **argv) {
     logInfo("Listening on TCP port %d", port);
     setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
 
+    logInfo("Listening on SCTP port %d", adminPort);
+    setsockopt(adminServer, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int));
+
+
     if(bind(server, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
         err_msg = "unable to bind socket";
         goto finally;
     }
 
-    if (listen(server, 20) < 0) {
+    if(bind(adminServer, (struct sockaddr*) &adminAddr, sizeof(adminAddr)) < 0) {
+        err_msg = "unable to bind admin socket";
+        goto finally;
+    }
+
+    if (listen(server, BACKLOG) < 0) {
         err_msg = "unable to listen";
+        goto finally;
+    }
+
+    if (listen(adminServer, BACKLOG) < 0) {
+        err_msg = "unable to listen admin";
         goto finally;
     }
 
@@ -86,6 +112,12 @@ int main(const int argc, const char **argv) {
         err_msg = "getting server socket flags";
         goto finally;
     }
+
+    if(fdSetNIO(adminServer) == -1) {
+        err_msg = "getting admin server socket flags";
+        goto finally;
+    }
+
     const struct multiplexorInit conf = {
         .signal = SIGALRM,
         .selectTimeout = {
@@ -105,6 +137,13 @@ int main(const int argc, const char **argv) {
     }
     const eventHandler popv3 = {
         .read       = proxyPopv3PassiveAccept,
+        .write      = NULL,
+        .block      = NULL,
+        .close      = NULL, // nada que liberar por ahora
+    };
+
+    const eventHandler adminHandler = {
+        .read       =  NULL,  //adminPassiveAccept, 
         .write      = NULL,
         .block      = NULL,
         .close      = NULL, // nada que liberar por ahora
@@ -131,6 +170,14 @@ int main(const int argc, const char **argv) {
         goto finally;
     }
     logInfo("Passive socket registered in fd: %d", server);
+
+    status = registerFd(mux, adminServer, &adminHandler, READ, NULL);
+    if(status != MUX_SUCCESS) {
+        err_msg = "registering fd for admin";
+        goto finally;
+    }
+    logInfo("Passive socket registered in fd: %d", adminServer);
+
 
     for(;!done;) {
         err_msg = NULL;
