@@ -28,7 +28,7 @@
 #include "Multiplexor.h"
 #include "logger.h"
 #include "errorslib.h"
-#include "popv3nio.h"
+#include "proxyPopv3nio.h"
 
 static bool done = false;
 
@@ -104,7 +104,7 @@ int main(const int argc, const char **argv) {
         goto finally;
     }
     const eventHandler popv3 = {
-        .read       = popv3PassiveAccept,
+        .read       = proxyPopv3PassiveAccept,
         .write      = NULL,
         .block      = NULL,
         .close      = NULL, // nada que liberar por ahora

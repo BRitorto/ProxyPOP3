@@ -1,5 +1,5 @@
 /**
- * popv3nio.c  - controla el flujo de un proxy POPv3 (sockets no bloqueantes)
+ * proxyPopv3nio.c  - controla el flujo de un proxy POPv3 (sockets no bloqueantes)
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,25 +12,24 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-#include "popv3nio.h"
+#include "proxyPopv3nio.h"
 #include "buffer.h"
 #include "logger.h"
 #include "errorslib.h"
 #include "Multiplexor.h"
+#include "stm.h"
 
 #define BUFFER_SIZE 2048
 
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
-typedef enum popv3State {
-    CONNECTING,
-    AUTHORIZATION,
-    TRANSACTION,
-    UPDATE,
+typedef enum proxyPopv3State {
+    /*CLEAN_TRANSACTION,
+    TRANSFORM_TRANSACTION,*/
     COPY,
     DONE,
     ERROR,
-} popv3State;
+} proxyPopv3State;
 
 typedef struct copy {
     int *           fd;
@@ -40,35 +39,38 @@ typedef struct copy {
     struct copy *   other;
 } copy;
 
-typedef struct popv3 {
-    popv3State state;
+typedef struct proxyPopv3 {
     int originFd;
     int clientFd;
     bufferADT readBuffer;
     bufferADT writeBuffer;
+
     copy clientCopy;
     copy originCopy;
+
+    /** maquinas de estados */
+    struct state_machine stm;
 
     /** cantidad de referencias a este objeto. si es uno se debe destruir */
     unsigned references;
     /** siguiente en el pool */
-    struct popv3 * next;
-} popv3;
+    struct proxyPopv3 * next;
+} proxyPopv3;
 
-static void popv3Read(MultiplexorKey key);
+static void proxyPopv3Read(MultiplexorKey key);
 
-static void popv3Write(MultiplexorKey key);
+static void proxyPopv3Write(MultiplexorKey key);
 
-static void popv3Block(MultiplexorKey key);
+static void proxyPopv3Block(MultiplexorKey key);
 
-static void popv3Close(MultiplexorKey key);
+static void proxyPopv3Close(MultiplexorKey key);
 
-static void popv3Done(MultiplexorKey key);
+static void proxyPopv3Done(MultiplexorKey key);
 
 
-static popv3 * newPopv3(int clientFd, int originFd, size_t bufferSize);
+static proxyPopv3 * newProxyPopv3(int clientFd, int originFd, size_t bufferSize);
 
-static void deletePopv3(popv3 * p);
+static void deleteProxyPopv3(proxyPopv3 * p);
 
 static void copyInit(const unsigned state, MultiplexorKey key);
 
@@ -80,49 +82,50 @@ static unsigned copyReadAndQueue(MultiplexorKey key);
 
 static unsigned copyWrite(MultiplexorKey key);
 
+static const struct state_definition * proxyPopv3DescribeStates(void);
 
-static const eventHandler popv3Handler = {
-    .read   = popv3Read,
-    .write  = popv3Write,
-    .block  = popv3Block,
-    .close  = popv3Close,
+
+static const eventHandler proxyPopv3Handler = {
+    .read   = proxyPopv3Read,
+    .write  = proxyPopv3Write,
+    .block  = proxyPopv3Block,
+    .close  = proxyPopv3Close,
 };
 
-#define ATTACHMENT(key) ( (struct popv3 *)(key)->data)
+#define ATTACHMENT(key) ( (struct proxyPopv3 *)(key)->data)
 
-static void popv3Read(MultiplexorKey key) {
+static void proxyPopv3Read(MultiplexorKey key) {
     logInfo("Starting to copy");
-    copyInit(COPY, key);
-    ATTACHMENT(key)->state = copyReadAndQueue(key);
+    struct state_machine * stm = &ATTACHMENT(key)->stm;
+    const proxyPopv3State state = stm_handler_read(stm, key);
 
-    popv3State state = ATTACHMENT(key)->state;
     logDebug("state: %d", state);
     if(ERROR == state || DONE == state) {
-        popv3Done(key);
+        proxyPopv3Done(key);
     }
 }
 
-static void popv3Write(MultiplexorKey key) {
-    copyInit(COPY, key);
-    ATTACHMENT(key)->state = copyWrite(key);
+static void proxyPopv3Write(MultiplexorKey key) {
+    struct state_machine * stm = &ATTACHMENT(key)->stm;
+    const proxyPopv3State state = stm_handler_write(stm, key);
+
     logInfo("Finishing copy");
 
-    popv3State state = ATTACHMENT(key)->state;
     logDebug("state: %d", state);
     if(ERROR == state || DONE == state) {
-        popv3Done(key);
+        proxyPopv3Done(key);
     }
 }
 
-static void popv3Block(MultiplexorKey key) {
+static void proxyPopv3Block(MultiplexorKey key) {
 
 }
 
-static void popv3Close(MultiplexorKey key) {
-    deletePopv3(ATTACHMENT(key));
+static void proxyPopv3Close(MultiplexorKey key) {
+    deleteProxyPopv3(ATTACHMENT(key));
 }
 
-static void popv3Done(MultiplexorKey key) {
+static void proxyPopv3Done(MultiplexorKey key) {
     logDebug("Estoy por desregistrar los fds en done");
     const int fds[] = {
         ATTACHMENT(key)->clientFd,
@@ -139,18 +142,18 @@ static void popv3Done(MultiplexorKey key) {
 }
 
 /**
- * Pool de `struct popv3', para ser reusados.
+ * Pool de `struct proxyPopv3', para ser reusados.
  *
  * Como tenemos un unico hilo que emite eventos no necesitamos barreras de
  * contención.
  */
 static const unsigned  maxPool  = 50; // tamaño máximo
 static unsigned        poolSize = 0;  // tamaño actual
-static struct popv3  * pool      = 0;  // pool propiamente dicho
+static struct proxyPopv3  * pool      = 0;  // pool propiamente dicho
 
-static popv3 * newPopv3(int clientFd, int originFd, size_t bufferSize) {
+static proxyPopv3 * newProxyPopv3(int clientFd, int originFd, size_t bufferSize) {
    
-    struct popv3 * ret;
+    struct proxyPopv3 * ret;
     if(pool == NULL) {
         ret = malloc(sizeof(*ret));
     } else {
@@ -163,18 +166,22 @@ static popv3 * newPopv3(int clientFd, int originFd, size_t bufferSize) {
     }
     memset(ret, 0x00, sizeof(*ret));
 
-    ret->state = COPY;
     ret->clientFd = clientFd;
     ret->originFd = originFd;
-    ret->readBuffer = createBuffer(BUFFER_SIZE);
-    ret->writeBuffer = createBuffer(BUFFER_SIZE);
+    ret->readBuffer = createBuffer(bufferSize);
+    ret->writeBuffer = createBuffer(bufferSize);
     
+    ret->stm    .initial   = COPY;
+    ret->stm    .max_state = ERROR;
+    ret->stm    .states    = proxyPopv3DescribeStates();
+    stm_init(&ret->stm);
+
     ret->references = 1;
 finally:
     return ret;
 }
 
-static void deletePopv3(popv3 * p) {
+static void deleteProxyPopv3(proxyPopv3 * p) {
     if(p != NULL) {
         if(p->references == 1) {
             if(poolSize < maxPool) {
@@ -190,10 +197,11 @@ static void deletePopv3(popv3 * p) {
     } 
 }
 
-void popv3PassiveAccept(MultiplexorKey key) {
+void proxyPopv3PassiveAccept(MultiplexorKey key) {
 
     struct sockaddr_storage       client_addr;
     socklen_t                     client_addr_len = sizeof(client_addr);
+    proxyPopv3 *                  proxy           = NULL;
 
     const int clientFd = accept(key->fd, (struct sockaddr*) &client_addr, &client_addr_len);
     if(clientFd == -1) {
@@ -208,6 +216,7 @@ void popv3PassiveAccept(MultiplexorKey key) {
     originServerAddr originAddr = *((originServerAddr *) key->data);
     int originFd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if(originFd == -1) {
+        logFatal("origin fd = -1");
         exit(1);
     }
     if(connect(originFd, (struct sockaddr *) &originAddr.ipv4, sizeof(originAddr.ipv4)) == -1) {
@@ -216,12 +225,12 @@ void popv3PassiveAccept(MultiplexorKey key) {
     }
     /////
 
-    popv3 * p = newPopv3(clientFd, originFd, BUFFER_SIZE);
-
-    if(MUX_SUCCESS != registerFd(key->mux, clientFd, &popv3Handler, READ, p)) {
+    proxy = newProxyPopv3(clientFd, originFd, BUFFER_SIZE);
+    logDebug("Proxy hecho");
+    if(MUX_SUCCESS != registerFd(key->mux, clientFd, &proxyPopv3Handler, READ, proxy)) {
         goto fail;
     }
-    if(MUX_SUCCESS != registerFd(key->mux, originFd, &popv3Handler, READ, p)) { //READ QUIERO SI ME DA MENSAJE DE +OK DEVOLVERLO
+    if(MUX_SUCCESS != registerFd(key->mux, originFd, &proxyPopv3Handler, READ, proxy)) { //READ QUIERO SI ME DA MENSAJE DE +OK DEVOLVERLO
         goto fail;
     }
     logInfo("Connection established, client fd: %d, origin fd:%d", clientFd, originFd);
@@ -231,10 +240,11 @@ fail:
     if(clientFd != -1) {
         close(clientFd);
     }
+    deleteProxyPopv3(proxy);
 }
 
 static void copyInit(const unsigned state, MultiplexorKey key) {
-    struct popv3 * p = ATTACHMENT(key);
+    struct proxyPopv3 * p = ATTACHMENT(key);
 
     copy * d        = &(p->clientCopy);
     d->fd           = &(p->clientFd);
@@ -339,4 +349,30 @@ static unsigned copyWrite(MultiplexorKey key) {
     return ret;
 }
 
+/* definición de handlers para cada estado */
+static const struct state_definition clientStatbl[] = {
+    /*{
+        .state            = CLEAN_TRANSACTION,
+        .on_arrival       = hello_read_init,
+        .on_departure     = hello_read_close,
+        .on_read_ready    = hello_read,
+    }, {
+        .state            = TRANSFORM_TRANSACTION,
+        .on_write_ready   = hello_write,
+    },*/ {
+        .state            = COPY,
+        .on_arrival       = copyInit,
+        .on_read_ready    = copyReadAndQueue,
+        .on_write_ready   = copyWrite,
+    }, {
+        .state            = DONE,
+
+    },{
+        .state            = ERROR,
+    }
+};
+
+static const struct state_definition * proxyPopv3DescribeStates(void) {
+    return clientStatbl;
+}
 
