@@ -72,6 +72,8 @@ static proxyPopv3 * newProxyPopv3(int clientFd, int originFd, size_t bufferSize)
 
 static void deleteProxyPopv3(proxyPopv3 * p);
 
+static void cleanTransactionInit(const unsigned state, MultiplexorKey key);
+
 static void copyInit(const unsigned state, MultiplexorKey key);
 
 static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d);
@@ -349,10 +351,15 @@ static unsigned copyWrite(MultiplexorKey key) {
     return ret;
 }
 
+static void cleanTransactionInit(const unsigned state, MultiplexorKey key) {
+
+}
+
 /* definición de handlers para cada estado */
 static const struct stateDefinition clientStatbl[] = {
     {
         .state            = CLEAN_TRANSACTION,
+        .onArrival        = cleanTransactionInit,
     }, {
         .state            = TRANSFORM_TRANSACTION,
     },{
