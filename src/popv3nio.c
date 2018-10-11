@@ -20,6 +20,8 @@
 
 #define BUFFER_SIZE 2048
 
+#define N(x) (sizeof(x)/sizeof((x)[0]))
+
 typedef enum popv3State {
     CONNECTING,
     AUTHORIZATION,
@@ -61,6 +63,9 @@ static void popv3Block(MultiplexorKey key);
 
 static void popv3Close(MultiplexorKey key);
 
+static void popv3Done(MultiplexorKey key);
+
+
 static popv3 * newPopv3(int clientFd, int originFd, size_t bufferSize);
 
 static void deletePopv3(popv3 * p);
@@ -88,13 +93,25 @@ static const eventHandler popv3Handler = {
 static void popv3Read(MultiplexorKey key) {
     logInfo("Starting to copy");
     copyInit(COPY, key);
-    copyReadAndQueue(key);
-    logInfo("Finishing copy");
+    ATTACHMENT(key)->state = copyReadAndQueue(key);
+
+    popv3State state = ATTACHMENT(key)->state;
+    logDebug("state: %d", state);
+    if(ERROR == state || DONE == state) {
+        popv3Done(key);
+    }
 }
 
 static void popv3Write(MultiplexorKey key) {
     copyInit(COPY, key);
-    copyWrite(key);
+    ATTACHMENT(key)->state = copyWrite(key);
+    logInfo("Finishing copy");
+
+    popv3State state = ATTACHMENT(key)->state;
+    logDebug("state: %d", state);
+    if(ERROR == state || DONE == state) {
+        popv3Done(key);
+    }
 }
 
 static void popv3Block(MultiplexorKey key) {
@@ -103,6 +120,22 @@ static void popv3Block(MultiplexorKey key) {
 
 static void popv3Close(MultiplexorKey key) {
     deletePopv3(ATTACHMENT(key));
+}
+
+static void popv3Done(MultiplexorKey key) {
+    logDebug("Estoy por desregistrar los fds en done");
+    const int fds[] = {
+        ATTACHMENT(key)->clientFd,
+        ATTACHMENT(key)->originFd,
+    };
+    for(unsigned i = 0; i < N(fds); i++) {
+        if(fds[i] != -1) {
+            if(MUX_SUCCESS != unregisterFd(key->mux, fds[i])) {
+                fail("Problem trying to unregister a fd: %d.", fds[i]);
+            }
+            close(fds[i]);
+        }
+    }
 }
 
 /**
@@ -152,7 +185,7 @@ static void deletePopv3(popv3 * p) {
                 free(p);
             }
         } else {
-        p->references -= 1;
+            p->references -= 1;
         }
     } 
 }
@@ -220,26 +253,24 @@ static void copyInit(const unsigned state, MultiplexorKey key) {
 
 static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d) {
     fdInterest ret = NO_INTEREST;
-    if ((d->duplex & READ)  && canWrite(d->readBuffer)) {
+    if ((d->duplex & READ)  && canWrite(d->readBuffer))
         ret |= READ;
-    }
     if ((d->duplex & WRITE) && canRead(d->writeBuffer)) {
         ret |= WRITE;
     }
-    if(MUX_SUCCESS != setInterest(mux, *d->fd, ret)) {
-        abort();
-    }
+    logDebug("Interes computado: %d", ret);
+    if(MUX_SUCCESS != setInterest(mux, *d->fd, ret))
+        fail("Problem trying to set interest: %d,to multiplexor in copy, fd: %d.", ret, *d->fd);
+    
     return ret;
 }
 
 static copy * copyPtr(MultiplexorKey key) {
     copy * d = &(ATTACHMENT(key)->clientCopy);
 
-    if(*d->fd == key->fd) {
-        // ok
-    } else {
+    if(*d->fd != key->fd)
         d = d->other;
-    }
+    
     return  d;
 }
 
@@ -255,6 +286,7 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
     uint8_t *ptr = getWritePtr(buffer, &size);
     n = recv(key->fd, ptr, size, 0);
     if(n <= 0) {
+        logDebug("ALGUIEN CERRO LA CONEXION");
         shutdown(*d->fd, SHUT_RD);
         d->duplex &= ~READ;
         if(*d->other->fd != -1) {
@@ -265,6 +297,8 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
         updateWritePtr(buffer, n);
     }
 
+    logDebug("duplex READ interest: %d", d->duplex);
+    
     logMetric("Coppied from %s, total copied: %lu bytes", (*d->fd == ATTACHMENT(key)->clientFd)? "client to server" : "server to client", n);
 
     copyComputeInterests(key->mux, d);
@@ -295,6 +329,8 @@ static unsigned copyWrite(MultiplexorKey key) {
     } else {
         updateReadPtr(buffer, n);
     }
+    logDebug("duplex WRITE interest: %d", d->duplex);
+
     copyComputeInterests(key->mux, d);
     copyComputeInterests(key->mux, d->other);
     if(d->duplex == NO_INTEREST) {
@@ -302,4 +338,5 @@ static unsigned copyWrite(MultiplexorKey key) {
     }
     return ret;
 }
+
 

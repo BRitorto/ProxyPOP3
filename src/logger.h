@@ -25,12 +25,12 @@ typedef enum logStatus {
 typedef void (*log_LockFn)(void *udata, int lock);
 
 
-#define logTrace(...)  logLogger(LOG_LEVEL_TRACE, __FILE__, __LINE__, __VA_ARGS__)
-#define logDebug(...)  logLogger(LOG_LEVEL_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
-#define logInfo(...)   logLogger(LOG_LEVEL_INFO,  __FILE__, __LINE__, __VA_ARGS__)
-#define logWarn(...)   logLogger(LOG_LEVEL_WARN,  __FILE__, __LINE__, __VA_ARGS__)
-#define logError(...)  logLogger(LOG_LEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__)
-#define logFatal(...)  logLogger(LOG_LEVEL_FATAL, __FILE__, __LINE__, __VA_ARGS__)
+#define logTrace(...)  logLogger(LOG_LEVEL_TRACE,  __FILE__, __LINE__, __VA_ARGS__)
+#define logDebug(...)  logLogger(LOG_LEVEL_DEBUG,  __FILE__, __LINE__, __VA_ARGS__)
+#define logInfo(...)   logLogger(LOG_LEVEL_INFO,   __FILE__, __LINE__, __VA_ARGS__)
+#define logWarn(...)   logLogger(LOG_LEVEL_WARN,   __FILE__, __LINE__, __VA_ARGS__)
+#define logError(...)  logLogger(LOG_LEVEL_ERROR,  __FILE__, __LINE__, __VA_ARGS__)
+#define logFatal(...)  logLogger(LOG_LEVEL_FATAL,  __FILE__, __LINE__, __VA_ARGS__)
 #define logMetric(...) logLogger(LOG_LEVEL_METRIC, __FILE__, __LINE__, __VA_ARGS__)
 
 void loggerSetUdata(void *udata);
