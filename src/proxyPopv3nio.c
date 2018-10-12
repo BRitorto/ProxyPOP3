@@ -301,6 +301,11 @@ static unsigned helloRead(MultiplexorKey key) {
                 } else {
                     ret = ERROR;
                 }
+                //GUARDO EL MSG DEL ORGIN EN EL BUFFER WRITE PARA MANDARLO AL CLIENTE
+                char * writeHello = (char *) getWritePtr(check->writeBuffer, &count);
+                memcpy(writeHello, helloOrigin, n);
+                updateWritePtr(check->writeBuffer, n);
+                updateReadPtr(check->readBuffer, n);
             }
         }
     } else {
@@ -328,11 +333,11 @@ static void checkPipeliningClose(const unsigned state, MultiplexorKey key) {
 
 static unsigned checkPipeliningWrite(MultiplexorKey key) {
     
+    const char * capaMsg = "CAPA\r\n";
     unsigned  ret     = CHECK_PIPELINIG;
-      size_t  count = 6; //tamaño de buffer
+      size_t  count = strlen(capaMsg); 
      ssize_t  n;
 
-    const char * capaMsg = "CAPA\r\n";
     n = send(key->fd, capaMsg, count, MSG_NOSIGNAL);
     if(n == -1) {
         ret = ERROR;
@@ -346,25 +351,24 @@ static unsigned checkPipeliningWrite(MultiplexorKey key) {
 
 static unsigned checkPipeliningRead(MultiplexorKey key) {
      
-    logDebug("check pipelining read");
-    //checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
+    checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
     unsigned  ret      = CHECK_PIPELINIG;
-    uint8_t *writePtr = calloc(256,1);
-    //size_t  count;
+    uint8_t *writePtr;// = calloc(256,1);
+    size_t  count;
     ssize_t  n;
 
-    //writePtr = getWritePtr(check->readBuffer, &count);
-    n = recv(key->fd, writePtr, 256, 0);
+    writePtr = getWritePtr(check->readBuffer, &count);
+    n = recv(key->fd, writePtr, count, 0);
     if(n > 0) {
-        /*updateWritePtr(check->readBuffer, n);
+        updateWritePtr(check->readBuffer, n);
 
         char * source = (char *) getReadPtr(check->readBuffer, &count);
         char * dest = malloc(n+1);
         memcpy(dest, source, n);
         *(dest+n) = 0;
 
-        updateReadPtr(check->readBuffer, n);*/
-        logWarn("Capa: %s", writePtr);
+        updateReadPtr(check->readBuffer, n);
+        logWarn("Capa: %s", dest);
 
         if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
             MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {
@@ -387,11 +391,12 @@ helloWrite(MultiplexorKey key) {
     unsigned  ret     = HELLO_WRITE;
       size_t  count;// = strlen(helloMsg); //tamaño del buffer
      ssize_t  n;
-     uint8_t * readPtr = getReadPtr(check->readBuffer, &count);
+     uint8_t * readPtr = getReadPtr(check->writeBuffer, &count);
     n = send(key->fd, readPtr, count, MSG_NOSIGNAL);
     if(n == -1) {
         ret = ERROR;
     } else if(MUX_SUCCESS == setInterestKey(key, READ)) {
+        updateReadPtr(check->writeBuffer, n);
         ret = COPY;
     } else {
         ret = ERROR;
