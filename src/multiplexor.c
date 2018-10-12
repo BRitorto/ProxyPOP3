@@ -126,7 +126,7 @@ static inline void fdInitialize(fdType * fd) {
 }
 
 static void initialize(MultiplexorADT mux, const size_t lastIndex) {
-    assert(lastIndex <= mux->size);
+    checkGreaterOrEqualsThan(mux->size, lastIndex, "Error initializing multiplexor");
     for(size_t i = lastIndex; i < mux->size ; i++)
         fdInitialize(mux->fds + i);
 }
