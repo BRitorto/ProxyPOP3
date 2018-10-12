@@ -26,7 +26,7 @@ inline static void handleFirst(stateMachine stm, MultiplexorKey key) {
 }
 
 inline static void jump(stateMachine stm, unsigned next, MultiplexorKey key) {
-    checkGreaterThan(stm->maxState, next, "Error the next state is grather than max state.");
+    checkGreaterOrEquealsThan(stm->maxState, next, "Error the next state is grather than max state.");
    
     if(stm->current != stm->states + next) {
         if(stm->current != NULL && stm->current->onDeparture != NULL) {

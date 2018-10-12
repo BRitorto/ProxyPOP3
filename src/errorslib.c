@@ -15,7 +15,6 @@ static const char * msgError[] = {
 
 
 static inline void fatalFinally(const char * file, int line, const char * fmt, va_list args) {
-	fflush(stdout);
 	vlogLogger(LOG_LEVEL_FATAL, file, line, fmt, args);
 	va_end(args);
 	exit(1);
@@ -48,6 +47,7 @@ void checkConditionWithFinally(checkType type, int condition, finallyFunc finall
 		vlogLogger(LOG_LEVEL_FATAL, file, line, fmt, args);
 		va_end(args);
 		finally(data);
+		exit(1);
 	}
 }
 

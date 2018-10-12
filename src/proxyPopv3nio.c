@@ -24,20 +24,28 @@
 #define N(x) (sizeof(x)/sizeof((x)[0]))
 
 typedef enum proxyPopv3State {
-    CLEAN_TRANSACTION,
-    TRANSFORM_TRANSACTION,
+    HELLO_READ,
+    CHECK_PIPELINIG,
+    HELLO_WRITE,
     COPY,
     DONE,
     ERROR,
 } proxyPopv3State;
 
-typedef struct copy {
+typedef struct checkPipelining {
+    /** buffer utilizado para I/O */
+    bufferADT           readBuffer;
+    bufferADT           writeBuffer;
+    pipeliningParser    parser;
+} checkPipelining;
+
+typedef struct copyStruct {
     int *           fd;
     bufferADT       readBuffer;
     bufferADT       writeBuffer;
     fdInterest      duplex;
-    struct copy *   other;
-} copy;
+    struct copyStruct *   other;
+} copyStruct;
 
 typedef struct proxyPopv3 {
     int originFd;
@@ -45,8 +53,15 @@ typedef struct proxyPopv3 {
     bufferADT readBuffer;
     bufferADT writeBuffer;
 
-    copy clientCopy;
-    copy originCopy;
+    /** estados para el client_fd */
+    union {
+        copyStruct          copy;
+    } client;
+    /** estados para el origin_fd */
+    union {
+        checkPipelining     checkPipelining;
+        copyStruct          copy;
+    } origin;
 
     /** maquinas de estados */
     struct stateMachineCDT stm;
@@ -56,6 +71,8 @@ typedef struct proxyPopv3 {
     /** siguiente en el pool */
     struct proxyPopv3 * next;
 } proxyPopv3;
+
+#define ATTACHMENT(key) ( (struct proxyPopv3 *)(key)->data)
 
 static void proxyPopv3Read(MultiplexorKey key);
 
@@ -76,9 +93,9 @@ static void cleanTransactionInit(const unsigned state, MultiplexorKey key);
 
 static void copyInit(const unsigned state, MultiplexorKey key);
 
-static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d);
+static fdInterest copyComputeInterests(MultiplexorADT mux, copyStruct * d);
 
-static copy * copyPtr(MultiplexorKey key);
+static copyStruct * copyPtr(MultiplexorKey key);
 
 static unsigned copyReadAndQueue(MultiplexorKey key);
 
@@ -94,14 +111,12 @@ static const eventHandler proxyPopv3Handler = {
     .close  = proxyPopv3Close,
 };
 
-#define ATTACHMENT(key) ( (struct proxyPopv3 *)(key)->data)
-
 static void proxyPopv3Read(MultiplexorKey key) {
     logInfo("Starting to copy");
     stateMachine stm = &ATTACHMENT(key)->stm;
     const proxyPopv3State state = stateMachineHandlerRead(stm, key);
 
-    logDebug("state: %d", state);
+    logDebug("State: %d", state);
     if(ERROR == state || DONE == state) {
         proxyPopv3Done(key);
     }
@@ -113,7 +128,7 @@ static void proxyPopv3Write(MultiplexorKey key) {
 
     logInfo("Finishing copy");
 
-    logDebug("state: %d", state);
+    logDebug("State: %d", state);
     if(ERROR == state || DONE == state) {
         proxyPopv3Done(key);
     }
@@ -128,7 +143,7 @@ static void proxyPopv3Close(MultiplexorKey key) {
 }
 
 static void proxyPopv3Done(MultiplexorKey key) {
-    logDebug("Estoy por desregistrar los fds en done");
+    logDebug("Connection close, unregistering file descriptors from multiplexor");
     const int fds[] = {
         ATTACHMENT(key)->clientFd,
         ATTACHMENT(key)->originFd,
@@ -183,20 +198,46 @@ finally:
     return ret;
 }
 
-static void deleteProxyPopv3(proxyPopv3 * p) {
-    if(p != NULL) {
-        if(p->references == 1) {
+static void realDeleteProxyPopv3(proxyPopv3 * proxy) {
+    deleteBuffer(proxy->readBuffer);
+    deleteBuffer(proxy->writeBuffer);
+    free(proxy);
+}
+
+static void deleteProxyPopv3(proxyPopv3 * proxy) {
+    if(proxy != NULL) {
+        if(proxy->references == 1) {
             if(poolSize < maxPool) {
-                p->next = pool;
-                pool    = p;
+                proxy->next = pool;
+                pool        = proxy;
                 poolSize++;
             } else {
-                free(p);
+                realDeleteProxyPopv3(proxy);
             }
         } else {
-            p->references -= 1;
+            proxy->references -= 1;
         }
     } 
+}
+
+static void errorConnectingOriginHandler(void * data) {
+    const int clientFd = *((int *) data);
+    const char * errorMsg = "-ERR Unable to reach the server.\r\n";
+
+    if(clientFd != -1) {
+        //escribiendo sin saber si podemos escribir puede BLOQUEAR
+        send(clientFd, errorMsg, strlen(errorMsg), MSG_NOSIGNAL); 
+        close(clientFd);
+    }
+}
+
+static int connectToOrigin(originServerAddr * originAddr, int clientFd) {
+    int originFd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    checkFailWithFinally(originFd, errorConnectingOriginHandler, &clientFd, "Origin fd = -1");
+    
+    int connectResp = connect(originFd, (struct sockaddr *) &originAddr->ipv4, sizeof(originAddr->ipv4));
+    checkFailWithFinally(connectResp, errorConnectingOriginHandler, &clientFd, "Unable to reach the origin server");
+    return originFd;
 }
 
 void proxyPopv3PassiveAccept(MultiplexorKey key) {
@@ -212,30 +253,19 @@ void proxyPopv3PassiveAccept(MultiplexorKey key) {
     if(fdSetNIO(clientFd) == -1) {
         goto fail;
     }
-    logInfo("Accepting new client from: ");
+    logInfo("Accepting new client.");
     
-    ////connecting to server
-    originServerAddr originAddr = *((originServerAddr *) key->data);
-    int originFd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if(originFd == -1) {
-        logFatal("origin fd = -1");
-        exit(1);
-    }
-    if(connect(originFd, (struct sockaddr *) &originAddr.ipv4, sizeof(originAddr.ipv4)) == -1) {
-        logFatal("imposible conectar con el servidor origen");
-        exit(1); //ACA DEBERIAMOS IR A UN ESTADO
-    }
-    /////
-
+    int originFd = connectToOrigin(key->data, clientFd);
     proxy = newProxyPopv3(clientFd, originFd, BUFFER_SIZE);
-    logDebug("Proxy hecho");
-    if(MUX_SUCCESS != registerFd(key->mux, clientFd, &proxyPopv3Handler, READ, proxy)) {
+    logDebug("Proxy done.");
+
+    if(MUX_SUCCESS != registerFd(key->mux, clientFd, &proxyPopv3Handler, NO_INTEREST, proxy)) {
         goto fail;
     }
-    if(MUX_SUCCESS != registerFd(key->mux, originFd, &proxyPopv3Handler, READ, proxy)) { //READ QUIERO SI ME DA MENSAJE DE +OK DEVOLVERLO
+    if(MUX_SUCCESS != registerFd(key->mux, originFd, &proxyPopv3Handler, READ, proxy)) {
         goto fail;
     }
-    logInfo("Connection established, client fd: %d, origin fd:%d", clientFd, originFd);
+    logInfo("Connection established, client fd: %d, origin fd:%d.", clientFd, originFd);
 
     return ;
 fail:
@@ -245,123 +275,270 @@ fail:
     deleteProxyPopv3(proxy);
 }
 
-static void copyInit(const unsigned state, MultiplexorKey key) {
-    struct proxyPopv3 * p = ATTACHMENT(key);
+/** inicializa las variables de los estados HELLO_… */
+static void
+helloReadInit(const unsigned state, MultiplexorKey key) {
+    struct hello_st *d = &ATTACHMENT(key)->client.hello;
 
-    copy * d        = &(p->clientCopy);
-    d->fd           = &(p->clientFd);
-    d->readBuffer   = p->readBuffer;
-    d->writeBuffer  = p->writeBuffer;
-    d->duplex       = READ | WRITE;
-    d->other        = &(p->originCopy);
-
-    d               = &(p->originCopy);
-    d->fd           = &(p->originFd);
-    d->readBuffer   = p->writeBuffer;
-    d->writeBuffer  = p->readBuffer;
-    d->duplex       = READ | WRITE;
-    d->other        = &(p->clientCopy);
+    d->rb                              = &(ATTACHMENT(key)->read_buffer);
+    d->wb                              = &(ATTACHMENT(key)->write_buffer);
+    d->parser.data                     = &d->method;
+    d->parser.on_authentication_method = on_hello_method, hello_parser_init(
+            &d->parser);
 }
 
-static fdInterest copyComputeInterests(MultiplexorADT mux, copy * d) {
+static unsigned
+hello_process(const struct hello_st* d);
+
+/** lee todos los bytes del mensaje de tipo `hello' y inicia su proceso */
+static unsigned
+hello_read(struct selector_key *key) {
+    struct hello_st *d = &ATTACHMENT(key)->client.hello;
+    unsigned  ret      = HELLO_READ;
+        bool  error    = false;
+     uint8_t *ptr;
+      size_t  count;
+     ssize_t  n;
+
+    ptr = buffer_write_ptr(d->rb, &count);
+    n = recv(key->fd, ptr, count, 0);
+    if(n > 0) {
+        buffer_write_adv(d->rb, n);
+        const enum hello_state st = hello_consume(d->rb, &d->parser, &error);
+        if(hello_is_done(st, 0)) {
+            if(SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
+                ret = hello_process(d);
+            } else {
+                ret = ERROR;
+            }
+        }
+    } else {
+        ret = ERROR;
+    }
+
+    return error ? ERROR : ret;
+}
+
+/** procesamiento del mensaje `hello' */
+static unsigned
+hello_process(const struct hello_st* d) {
+    unsigned ret = HELLO_WRITE;
+
+    uint8_t m = d->method;
+    const uint8_t r = (m == SOCKS_HELLO_NO_ACCEPTABLE_METHODS) ? 0xFF : 0x00;
+    if (-1 == hello_marshall(d->wb, r)) {
+        ret  = ERROR;
+    }
+    if (SOCKS_HELLO_NO_ACCEPTABLE_METHODS == m) {
+        ret  = ERROR;
+    }
+    return ret;
+}
+
+/** libera los recursos al salir de HELLO_READ */
+static void
+hello_read_close(const unsigned state, struct selector_key *key) {
+    struct hello_st *d = &ATTACHMENT(key)->client.hello;
+
+    hello_parser_close(&d->parser);
+}
+
+static void checkPipeliningInit(const unsigned state, MultiplexorKey key) {
+    checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
+
+    check->readBuffer                      = &(ATTACHMENT(key)->readBuffer);
+    check->writeBuffer                     = &(ATTACHMENT(key)->writeBuffer);
+    check->parser.data                     = &d->method;
+    check->parser.on_authentication_method = on_hello_method, hello_parser_init(
+            &d->parser);
+}
+
+static void checkPipeliningClose(const unsigned state, MultiplexorKey key) {
+    checkPipelining check = &ATTACHMENT(key)->origin.checkPipelining;
+
+    hello_parser_close(&d->parser);
+}
+
+static unsigned checkPipeliningRead(MultiplexorKey key) {
+    checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
+    unsigned  ret      = HELLO_READ;
+        bool  error    = false;
+     uint8_t *writePtr;
+      size_t  count;
+     ssize_t  n;
+
+    writePtr = getWritePtr(check->readBuffer, &count);
+    n = recv(key->fd, writePtr, count, 0);
+    if(n > 0) {
+        updateWritePtr(check->readBuffer, n);
+        const enum check state = hello_consume(d->rb, &d->parser, &error);
+        if(hello_is_done(st, 0)) {
+            if(SELECTOR_SUCCESS == selector_set_interest_key(key, OP_WRITE)) {
+                ret = hello_process(d);
+            } else {
+                ret = ERROR;
+            }
+        }
+    } else {
+        ret = ERROR;
+    }
+
+    return error ? ERROR : ret;
+}
+
+/** escribe todos los bytes de la respuesta al mensaje `hello' */
+static unsigned
+hello_write(struct selector_key *key) {
+    struct hello_st *d = &ATTACHMENT(key)->client.hello;
+
+    unsigned  ret     = HELLO_WRITE;
+     uint8_t *ptr;
+      size_t  count;
+     ssize_t  n;
+
+    ptr = buffer_read_ptr(d->wb, &count);
+    n = send(key->fd, ptr, count, MSG_NOSIGNAL);
+    if(n == -1) {
+        ret = ERROR;
+    } else {
+        buffer_read_adv(d->wb, n);
+        if(!buffer_can_read(d->wb)) {
+            if(SELECTOR_SUCCESS == selector_set_interest_key(key, OP_READ)) {
+                ret = REQUEST_READ;
+            } else {
+                ret = ERROR;
+            }
+        }
+    }
+
+    return ret;
+}
+
+
+
+
+static void copyInit(const unsigned state, MultiplexorKey key) {
+    struct proxyPopv3 * proxy = ATTACHMENT(key);
+
+    copyStruct * copy  = &(proxy->client.copy);
+    copy->fd           = &(proxy->clientFd);
+    copy->readBuffer   = proxy->readBuffer;
+    copy->writeBuffer  = proxy->writeBuffer;
+    copy->duplex       = READ | WRITE;
+    copy->other        = &(proxy->origin.copy);
+
+    copy               = &(proxy->origin.copy);
+    copy->fd           = &(proxy->originFd);
+    copy->readBuffer   = proxy->writeBuffer;
+    copy->writeBuffer  = proxy->readBuffer;
+    copy->duplex       = READ | WRITE;
+    copy->other        = &(proxy->client.copy);
+}
+
+static fdInterest copyComputeInterests(MultiplexorADT mux, copyStruct * d) {
     fdInterest ret = NO_INTEREST;
     if ((d->duplex & READ)  && canWrite(d->readBuffer))
         ret |= READ;
     if ((d->duplex & WRITE) && canRead(d->writeBuffer)) {
         ret |= WRITE;
     }
-    logDebug("Interes computado: %d", ret);
+    logDebug("Computed interest: %d.", ret);
     if(MUX_SUCCESS != setInterest(mux, *d->fd, ret))
         fail("Problem trying to set interest: %d,to multiplexor in copy, fd: %d.", ret, *d->fd);
     
     return ret;
 }
 
-static copy * copyPtr(MultiplexorKey key) {
-    copy * d = &(ATTACHMENT(key)->clientCopy);
+static copyStruct * copyPtr(MultiplexorKey key) {
+    copyStruct * copy = &(ATTACHMENT(key)->client.copy);
 
-    if(*d->fd != key->fd)
-        d = d->other;
+    if(*copy->fd != key->fd)
+        copy = copy->other;
     
-    return  d;
+    return  copy;
 }
 
 static unsigned copyReadAndQueue(MultiplexorKey key) {
-    copy * d = copyPtr(key);
-    checkAreEquals(*d->fd, key->fd, "Copy destination and source have the same fd");
+    copyStruct * copy = copyPtr(key);
+    checkAreEquals(*copy->fd, key->fd, "Copy destination and source have the same file descriptor.");
 
     size_t size;
     ssize_t n;
-    bufferADT buffer = d->readBuffer;
+    bufferADT buffer = copy->readBuffer;
     unsigned ret = COPY;
 
     uint8_t *ptr = getWritePtr(buffer, &size);
     n = recv(key->fd, ptr, size, 0);
     if(n <= 0) {
-        logDebug("ALGUIEN CERRO LA CONEXION");
-        shutdown(*d->fd, SHUT_RD);
-        d->duplex &= ~READ;
-        if(*d->other->fd != -1) {
-            shutdown(*d->other->fd, SHUT_WR);
-            d->other->duplex &= ~WRITE;
+        logDebug("Someone close the connection.");
+        shutdown(*copy->fd, SHUT_RD);
+        copy->duplex &= ~READ;
+        if(*copy->other->fd != -1) {
+            shutdown(*copy->other->fd, SHUT_WR);
+            copy->other->duplex &= ~WRITE;
         }
     } else {
         updateWritePtr(buffer, n);
     }
 
-    logDebug("duplex READ interest: %d", d->duplex);
+    logDebug("Duplex READ interest: %d.", copy->duplex);
     
-    logMetric("Coppied from %s, total copied: %lu bytes", (*d->fd == ATTACHMENT(key)->clientFd)? "client to server" : "server to client", n);
+    logMetric("Coppied from %s, total copied: %lu bytes.", (*copy->fd == ATTACHMENT(key)->clientFd)? "client to server" : "server to client", n);
 
-    copyComputeInterests(key->mux, d);
-    copyComputeInterests(key->mux, d->other);
-    if(d->duplex == NO_INTEREST) {
+    copyComputeInterests(key->mux, copy);
+    copyComputeInterests(key->mux, copy->other);
+    if(copy->duplex == NO_INTEREST) {
         ret = DONE;
     }
     return ret;
 }
 
 static unsigned copyWrite(MultiplexorKey key) {
-    copy * d = copyPtr(key);
-    assert(*d->fd == key->fd);
+    copyStruct * copy = copyPtr(key);
+    checkAreEquals(*copy->fd, key->fd, "Copy destination and source have the same file descriptor.");
+
     size_t size;
     ssize_t n;
-    bufferADT buffer = d->writeBuffer;
+    bufferADT buffer = copy->writeBuffer;
     unsigned ret = COPY;
 
     uint8_t *ptr = getReadPtr(buffer, &size);
     n = send(key->fd, ptr, size, MSG_NOSIGNAL);
     if(n == -1) {
-        shutdown(*d->fd, SHUT_WR);
-        d->duplex &= ~WRITE;
-        if(*d->other->fd != -1) {                       //shutdeteo tanto socket cliente como servidor
-            shutdown(*d->other->fd, SHUT_RD);
-            d->other->duplex &= ~READ;
+        shutdown(*copy->fd, SHUT_WR);
+        copy->duplex &= ~WRITE;
+        if(*copy->other->fd != -1) {                       //shutdeteo tanto socket cliente como servidor
+            shutdown(*copy->other->fd, SHUT_RD);
+            copy->other->duplex &= ~READ;
         }
     } else {
         updateReadPtr(buffer, n);
     }
-    logDebug("duplex WRITE interest: %d", d->duplex);
+    logDebug("Duplex WRITE interest: %d.", copy->duplex);
 
-    copyComputeInterests(key->mux, d);
-    copyComputeInterests(key->mux, d->other);
-    if(d->duplex == NO_INTEREST) {
+    copyComputeInterests(key->mux, copy);
+    copyComputeInterests(key->mux, copy->other);
+    if(copy->duplex == NO_INTEREST) {
         ret = DONE;
     }
     return ret;
 }
 
-static void cleanTransactionInit(const unsigned state, MultiplexorKey key) {
-
-}
-
 /* definición de handlers para cada estado */
 static const struct stateDefinition clientStatbl[] = {
     {
-        .state            = CLEAN_TRANSACTION,
-        .onArrival        = cleanTransactionInit,
+        .state            = HELLO_READ,
+        .onArrival        = hello_read_init,
+        .onDeparture      = hello_read_close,
+        .onReadReady      = hello_read,
     }, {
-        .state            = TRANSFORM_TRANSACTION,
+        .state            = CHECK_PIPELINIG,
+        .onArrival        = checkPipeliningInit,
+        .onDeparture      = checkPipeliningClose,
+        .onReadReady      = checkPipeliningRead,
+    }, {
+        .state            = HELLO_WRITE,
+        .onWriteReady     = hello_write,
     },{
         .state            = COPY,
         .onArrival        = copyInit,
