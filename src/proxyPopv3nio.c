@@ -280,8 +280,7 @@ static void helloReadInit(const unsigned state, MultiplexorKey key) {
 }
 
 /** lee todos los bytes del mensaje de tipo `hello' y inicia su proceso */
-static unsigned
-helloRead(MultiplexorKey key) {
+static unsigned helloRead(MultiplexorKey key) {
     checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
     unsigned  ret      = HELLO_READ;
      uint8_t *writePtr;
@@ -348,24 +347,24 @@ static unsigned checkPipeliningWrite(MultiplexorKey key) {
 static unsigned checkPipeliningRead(MultiplexorKey key) {
      
     logDebug("check pipelining read");
-    checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
+    //checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
     unsigned  ret      = CHECK_PIPELINIG;
-     uint8_t *writePtr;
-      size_t  count;
-     ssize_t  n;
+    uint8_t *writePtr = calloc(256,1);
+    //size_t  count;
+    ssize_t  n;
 
-    writePtr = getWritePtr(check->readBuffer, &count);
-    n = recv(key->fd, writePtr, count, 0);
+    //writePtr = getWritePtr(check->readBuffer, &count);
+    n = recv(key->fd, writePtr, 256, 0);
     if(n > 0) {
-        updateWritePtr(check->readBuffer, n);
+        /*updateWritePtr(check->readBuffer, n);
 
         char * source = (char *) getReadPtr(check->readBuffer, &count);
         char * dest = malloc(n+1);
         memcpy(dest, source, n);
         *(dest+n) = 0;
 
-        updateReadPtr(check->readBuffer, n);
-        logWarn("Capa: %s", dest);
+        updateReadPtr(check->readBuffer, n);*/
+        logWarn("Capa: %s", writePtr);
 
         if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
             MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {
@@ -383,12 +382,13 @@ static unsigned checkPipeliningRead(MultiplexorKey key) {
 /** escribe todos los bytes de la respuesta al mensaje `hello' */
 static unsigned
 helloWrite(MultiplexorKey key) {
-    const char * helloMsg = "+OK Como va viejo?\r\n";
+    //const char * helloMsg = "+OK Como va viejo?\r\n";
+    checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
     unsigned  ret     = HELLO_WRITE;
-      size_t  count = strlen(helloMsg); //tamaño del buffer
+      size_t  count;// = strlen(helloMsg); //tamaño del buffer
      ssize_t  n;
-
-    n = send(key->fd, helloMsg, count, MSG_NOSIGNAL);
+     uint8_t * readPtr = getReadPtr(check->readBuffer, &count);
+    n = send(key->fd, readPtr, count, MSG_NOSIGNAL);
     if(n == -1) {
         ret = ERROR;
     } else if(MUX_SUCCESS == setInterestKey(key, READ)) {
