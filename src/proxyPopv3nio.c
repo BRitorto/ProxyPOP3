@@ -32,6 +32,12 @@ typedef enum proxyPopv3State {
     ERROR,
 } proxyPopv3State;
 
+typedef enum pipeliningStatus {
+    PIPELINING_NO_CHECKED    = 0,
+    PIPELINING_AVAILABLE     = 1,
+    PIPELINING_NOT_AVAILABLE = 2,
+} pipeliningStatus;
+
 typedef struct checkPipelining {
     /** buffer utilizado para I/O */
     bufferADT           readBuffer;
@@ -52,6 +58,8 @@ typedef struct proxyPopv3 {
     int clientFd;
     bufferADT readBuffer;
     bufferADT writeBuffer;
+
+    pipeliningStatus pipeliningStatus;
 
     /** estados para el client_fd */
     union {
@@ -101,6 +109,7 @@ static unsigned copyWrite(MultiplexorKey key);
 
 static const struct stateDefinition * proxyPopv3DescribeStates(void);
 
+static pipeliningStatus staticPipeliningStatus = PIPELINING_NO_CHECKED;
 
 static const eventHandler proxyPopv3Handler = {
     .read   = proxyPopv3Read,
@@ -184,6 +193,8 @@ static proxyPopv3 * newProxyPopv3(int clientFd, int originFd, size_t bufferSize)
     ret->readBuffer = createBuffer(bufferSize);
     ret->writeBuffer = createBuffer(bufferSize);
     
+    ret->pipeliningStatus = staticPipeliningStatus;
+
     ret->stm    .initial   = HELLO_READ;
     ret->stm    .maxState = ERROR;
     ret->stm    .states    = proxyPopv3DescribeStates();
@@ -296,19 +307,26 @@ static unsigned helloRead(MultiplexorKey key) {
         if(n >= 3) {
             char * helloOrigin = (char *) getReadPtr(check->readBuffer, &count);
             if(strncmp(helloOrigin, "+OK", 3) == 0) {
-                if(MUX_SUCCESS == setInterestKey(key, WRITE)) {
-                    ret = CHECK_PIPELINIG;
-                } else {
-                    ret = ERROR;
+                if(ATTACHMENT(key)->pipeliningStatus == PIPELINING_NO_CHECKED) {
+                    if(MUX_SUCCESS == setInterestKey(key, WRITE)) 
+                        ret = CHECK_PIPELINIG;
+                    else
+                        ret = ERROR;
                 }
+                else if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
+                    MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {
+                    ret = HELLO_WRITE;
+                }
+                else
+                    ret = ERROR;
                 //GUARDO EL MSG DEL ORGIN EN EL BUFFER WRITE PARA MANDARLO AL CLIENTE
                 char * writeHello = (char *) getWritePtr(check->writeBuffer, &count);
                 memcpy(writeHello, helloOrigin, n);
                 updateWritePtr(check->writeBuffer, n);
                 updateReadPtr(check->readBuffer, n);
-            }
-            else
+            } else {
                 ret = ERROR;
+            }
         }
     } else {
         ret = ERROR;
@@ -371,6 +389,8 @@ static unsigned checkPipeliningRead(MultiplexorKey key) {
 
         updateReadPtr(check->readBuffer, n);
         logWarn("Capa: %s", dest);
+        staticPipeliningStatus = PIPELINING_AVAILABLE;
+        ATTACHMENT(key)->pipeliningStatus = staticPipeliningStatus;
 
         if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
             MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {
