@@ -13,7 +13,7 @@ comp:$(SOURCES)
 	@echo "Tests Compilation complete."
 
 link:$(OBJECTS)
-	$(LINKER) $(LFLAGS) $(OBJECTS) -o $(TARGET).out
+	$(LINKER) $(LFLAGS) ./../stateMachine.o ./../errorslib.o ./../logger.o $(OBJECTS) -o $(TARGET).out
 	@echo "Tests Linking complete."
 
 %.o : %.c
