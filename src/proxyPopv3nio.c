@@ -307,6 +307,8 @@ static unsigned helloRead(MultiplexorKey key) {
                 updateWritePtr(check->writeBuffer, n);
                 updateReadPtr(check->readBuffer, n);
             }
+            else
+                ret = ERROR;
         }
     } else {
         ret = ERROR;
