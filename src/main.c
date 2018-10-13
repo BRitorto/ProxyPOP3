@@ -34,12 +34,15 @@
 
 static bool done = false;
 
-static void sigtermHandler(const int signal) {
+static void sigTermHandler(const int signal) {
     printf("signal %d, cleaning up and exiting\n",signal);//CERRAR LOS SOCKETS PASIVOS
     done = true;
 }
 
-//checkear como hacer para sischild wait y no por todos los hijos
+static void sigChildHandler(const int signal) {
+    while(waitpid(-1, 0, WNOHANG) != -1);
+}
+
 
 int main(const int argc, const char **argv) {
     loggerSetColor(true);
@@ -52,7 +55,7 @@ int main(const int argc, const char **argv) {
     unsigned port = 1110;
     unsigned adminPort = 9090;
 
-    const char * err_msg = NULL;
+    const char * errMsg = NULL;
     multiplexorStatus status = MUX_SUCCESS;
     MultiplexorADT mux = NULL;
 
@@ -73,7 +76,7 @@ int main(const int argc, const char **argv) {
     const int adminServer = socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP);
 
     if(server < 0) {
-        err_msg = "unable to create socket";
+        errMsg = "Unable to create socket";
         goto finally;
     }
 
@@ -85,36 +88,36 @@ int main(const int argc, const char **argv) {
 
 
     if(bind(server, (struct sockaddr*) &addr, sizeof(addr)) < 0) {
-        err_msg = "unable to bind socket";
+        errMsg = "Unable to bind socket";
         goto finally;
     }
 
     if(bind(adminServer, (struct sockaddr*) &adminAddr, sizeof(adminAddr)) < 0) {
-        err_msg = "unable to bind admin socket";
+        errMsg = "Unable to bind admin socket";
         goto finally;
     }
 
     if (listen(server, BACKLOG) < 0) {
-        err_msg = "unable to listen";
+        errMsg = "Unable to listen";
         goto finally;
     }
 
     if (listen(adminServer, BACKLOG) < 0) {
-        err_msg = "unable to listen admin";
+        errMsg = "Unable to listen admin";
         goto finally;
     }
 
-    signal(SIGTERM,  sigtermHandler);
-    signal(SIGINT,   sigtermHandler);
+    signal(SIGTERM,  sigTermHandler);
+    signal(SIGINT,   sigTermHandler);
     signal(SIGCHILD, sigChildHandler);
 
     if(fdSetNIO(server) == -1) {
-        err_msg = "getting server socket flags";
+        errMsg = "Getting server socket flags";
         goto finally;
     }
 
     if(fdSetNIO(adminServer) == -1) {
-        err_msg = "getting admin server socket flags";
+        errMsg = "Getting admin server socket flags";
         goto finally;
     }
 
@@ -126,13 +129,13 @@ int main(const int argc, const char **argv) {
         },
     };
     if(0 != multiplexorInit(&conf)) {
-        err_msg = "initializing Multiplexor";
+        errMsg = "Initializing Multiplexor";
         goto finally;
     }
 
     mux = createMultiplexorADT(1024);
     if(mux == NULL) {
-        err_msg = "unable to create MultiplexorADT";
+        errMsg = "Unable to create MultiplexorADT";
         goto finally;
     }
     const eventHandler popv3 = {
@@ -166,14 +169,14 @@ int main(const int argc, const char **argv) {
 
     status = registerFd(mux, server, &popv3, READ, &originAddr);
     if(status != MUX_SUCCESS) {
-        err_msg = "registering fd";
+        errMsg = "Registering fd";
         goto finally;
     }
     logInfo("Passive socket registered in fd: %d", server);
 
     status = registerFd(mux, adminServer, &adminHandler, READ, NULL);
     if(status != MUX_SUCCESS) {
-        err_msg = "registering fd for admin";
+        errMsg = "Registering fd for admin";
         goto finally;
     }
     logInfo("Passive socket registered in fd: %d", adminServer);
@@ -183,12 +186,12 @@ int main(const int argc, const char **argv) {
         err_msg = NULL;
         status = muxSelect(mux);
         if(status != MUX_SUCCESS) {
-            err_msg = "serving";
+            errMsg = "Serving";
             goto finally;
         }
     }
     if(err_msg == NULL) {
-        err_msg = "closing";
+        errMsg = "Closing";
     }
 
     int ret = 0;
