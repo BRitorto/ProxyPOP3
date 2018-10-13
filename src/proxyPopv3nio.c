@@ -130,7 +130,7 @@ static capabilities originCapabilities = {
 };
 
 static conf proxyConf = { 
-    .transformation = 0,
+    .transformation = 1,
 };
 
 static const eventHandler proxyPopv3Handler = {
@@ -459,7 +459,7 @@ static fdInterest copyComputeInterests(MultiplexorADT mux, copyStruct * copy) {
     if ((copy->duplex & WRITE) && canRead(copy->writeBuffer)) {
         ret |= WRITE;
     }
-    logDebug("Computed interest: %d.", ret);
+
     if(MUX_SUCCESS != setInterest(mux, *copy->fd, ret))
         fail("Problem trying to set interest: %d,to multiplexor in copy, fd: %d.", ret, *copy->fd);
     
@@ -498,6 +498,7 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
         updateWritePtr(buffer, n);
     }
 
+    logMetric("Coppied from %s, total copied: %lu bytes.", (*copy->fd == ATTACHMENT(key)->clientFd)? "client to proxy" : "server to proxy", n);
     logDebug("Duplex READ interest: %d.", copy->duplex);
     
     if(*copy->fd == ATTACHMENT(key)->originFd && proxyConf.transformation == 1) {
@@ -537,9 +538,8 @@ static unsigned copyWrite(MultiplexorKey key) {
     } else {
         updateReadPtr(buffer, n);
     }
+    logMetric("Coppied from %s, total copied: %lu bytes.", (*copy->fd == ATTACHMENT(key)->clientFd)? "proxy to client" : "proxy to server", n);
     logDebug("Duplex WRITE interest: %d.", copy->duplex);
-
-    logMetric("Coppied from %s, total copied: %lu bytes.", (*copy->fd == ATTACHMENT(key)->clientFd)? "client to server" : "server to client", n);
 
     copyComputeInterests(key->mux, copy);
     copyComputeInterests(key->mux, copy->other);
@@ -629,7 +629,7 @@ static unsigned transformWrite(MultiplexorKey key) {
     multiplexorStatus status = registerFd(key->mux, transform->outfd[0], &proxyPopv3Handler, READ, ATTACHMENT(key));
     checkAreEqualsWithFinally(status, MUX_SUCCESS, errorTransformHandler, &key, "Transform fail: cannot register OUT pipe in multiplexor.");
 
-    logMetric("Coppied from server to transform app, total copied: %lu bytes.", n);
+    logMetric("Coppied from proxy to transform app, total copied: %lu bytes.", n);
 
     updateReadPtr(buffer, n);
     setInterest(key->mux, transform->infd[1], NO_INTEREST);
