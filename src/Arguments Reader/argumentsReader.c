@@ -1,25 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <getopt.h>
-#include <stdbool.h>
+#include <unistd.h>
+#include <ctype.h>
 
 #define VERSION_NUMBER "1.0"
 
-static struct option longOptions[] =
-        {
-          {"error-file",          required_argument, 0, 'e'},
-          {"help",                no_argument,       0, 'h'},
-          {"pop3-addr",           required_argument, 0, 'l'},
-          {"manager-addr",        required_argument, 0, 'L'},
-          {"replace-msg",         required_argument, 0, 'm'},
-          {"media-type-censure",  required_argument, 0, 'M'},
-          {"manager-port",        required_argument, 0, 'o'},
-          {"local-port",          required_argument, 0, 'p'},
-          {"origin-port",         required_argument, 0, 'P'},
-          {"cmd",                 required_argument, 0, 't'},
-          {"version",             no_argument,       0, 'v'},
-          {0, 0, 0, 0}
-        };
 
 int main (int argc, char ** argv)
 {
@@ -27,24 +12,10 @@ int main (int argc, char ** argv)
   //checkGreatherOrEqualThan(2, argc, "pop3filter -Invalid Arguments");
   int c;
 
-  while (true)
+  while ((c = getopt(argc-1, argv, "e:hl:L:m:M:o:p:P:t:v")) != -1)
     {
-      int optionIndex = 0;
-      c = getopt_long (argc, argv, "e:hl:L:m:M:o:p:P:t:v", longOptions, &optionIndex);
-      if (c == -1)
-        break;
-
       switch (c)
         {
-  /*      case 0:
-          if (longOptions[optionIndex].flag != 0)
-            break;
-          printf ("option %s", longOptions[optionIndex].name);
-          if (optarg)
-            printf (" with arg %s", optarg);
-          printf ("\n");
-          break;
-*/
         case 'e':
          printf ("option -e with value `%s'\n", optarg);
           break;
@@ -85,10 +56,30 @@ int main (int argc, char ** argv)
           printf ("option -t with value `%s'\n", optarg);
           break;
 
-       /* case '?':
-           getopt_long already printed an error message. 
-          break;
-*/
+        case '?':
+            if (optopt == 'e')
+                fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+            if (optopt == 'l')
+                fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+            if (optopt == 'L')
+                fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+            if (optopt == 'm')
+                fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+            if (optopt == 'M')
+                fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+            if (optopt == 'o')
+                fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+            if (optopt == 'p')
+                fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+            if (optopt == 'P')
+                fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+            if (optopt == 't')
+                fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+            else if (isprint (optopt))
+                fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+            else
+                fprintf (stderr,"Unknown option character `\\x%x'.\n", optopt);
+            return 1;
         case 'v':
           puts ("option -v\n");
           break;
@@ -98,6 +89,8 @@ int main (int argc, char ** argv)
           abort ();
         }
     }
+  for (int index = optind; index < argc - 1; index++)
+    printf ("Non-option argument %s\n", argv[index]);
   //checkAreEquals(arg - optind, 1, "pop3filter -Invalid Arguments")
   printf("Origin Server Address: %s\n",argv[optind] );
 
