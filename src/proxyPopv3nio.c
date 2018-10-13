@@ -63,6 +63,7 @@ typedef struct proxyPopv3 {
 
     /** estados para el client_fd */
     union {
+        helloStruct                hello;
         copyStruct                 copy;
     } client;
     /** estados para el origin_fd */
@@ -371,7 +372,7 @@ static unsigned checkCapabilitiesRead(MultiplexorKey key) {
         updateWritePtr(check->readBuffer, n);
         const capaState state = capaParserConsume(&check->parser, check->readBuffer, &error);
         if(error)       //EL SERVIDOR RESPONDIO -ERR O NO SABE POPV3
-            ret = ERROR;//PODRIA PROBAR LOS CAPA A MANO O MANDAR POR DEFAULT QUE NO IMPLEMENTA, CAPAS TENGO LA RESPUESTA EN EL BUFFERS DEBERIA LIMPIARLO
+            ret = ERROR;//PODRIA PROBAR LOS CAPA A MANO O MANDAR POR DEFAULT QUE NO IMPLEMENTA, CAPAS TENGO LA RESPUESTA EN EL BUFFER DEBERIA LIMPIARLO
         else if(capaParserIsDone(state, 0)) {
             if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
                MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {    
@@ -390,7 +391,7 @@ static unsigned checkCapabilitiesRead(MultiplexorKey key) {
 
 static void helloWriteInit(const unsigned state, MultiplexorKey key) {
     proxyPopv3  * proxy = ATTACHMENT(key);
-    helloStruct * hello = &proxy->origin.hello;
+    helloStruct * hello = &proxy->client.hello;
 
     hello->readBuffer   = proxy->readBuffer;
     hello->writeBuffer  = proxy->writeBuffer;

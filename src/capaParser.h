@@ -24,9 +24,13 @@ typedef struct capabilities {
 
 typedef struct capaParser {
     /** permite al usuario del parser almacenar sus datos */
-    size_t msgSize;
-    size_t msgPipeliningSize;    
-    size_t crlfSize;
+    
+    union {
+        size_t indicatorSize;
+        size_t msgPipeliningSize;    
+        size_t crlfSize;
+    } current;
+
     capabilities * capas;
     /******** zona privada *****************/
     capaState state;
