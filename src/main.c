@@ -32,6 +32,7 @@
 #include "logger.h"
 #include "errorslib.h"
 #include "proxyPopv3nio.h"
+#include "adminnio.h"
 
 #define BACKLOG 20
 
@@ -149,7 +150,7 @@ int main(const int argc, const char **argv) {
     };
 
     const eventHandler adminHandler = {
-        .read       = NULL,  //adminPassiveAccept, 
+        .read       = adminPassiveAccept, 
         .write      = NULL,
         .block      = NULL,
         .close      = NULL, // nada que liberar por ahora
