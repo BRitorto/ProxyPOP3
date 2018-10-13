@@ -31,8 +31,8 @@ typedef void (* finallyFunc) (void *);
 #define checkFailWithFinally(aNumber, finally, data, ...)                         checkConditionWithFinally(CHECK_FAIL,         aNumber  >= 0          , finally, data, __FILE__, __LINE__, __VA_ARGS__)
 #define checkIsNullWithFinally(aPointer, finally, data, ...)                      checkConditionWithFinally(CHECK_IS_NULL,      aPointer == 0          , finally, data, __FILE__, __LINE__, __VA_ARGS__)
 #define checkIsNotNullWithFinally(aPointer, finally, data, ...)                   checkConditionWithFinally(CHECK_NOT_NULL,     aPointer != 0          , finally, data, __FILE__, __LINE__, __VA_ARGS__)
-#define checkAreEqualsWithFinally(aNumber, finally, data, otherNumber, ...)       checkConditionWithFinally(CHECK_EQUALS,       aNumber  == otherNumber, finally, data, __FILE__, __LINE__, __VA_ARGS__)
-#define checkAreNotEqualsWithFinally(aNumber, finally, data, otherNumber, ...)    checkConditionWithFinally(CHECK_NOT_EQUALS,   aNumber  != otherNumber, finally, data, __FILE__, __LINE__, __VA_ARGS__)
+#define checkAreEqualsWithFinally(aNumber, otherNumber, finally, data, ...)       checkConditionWithFinally(CHECK_EQUALS,       aNumber  == otherNumber, finally, data, __FILE__, __LINE__, __VA_ARGS__)
+#define checkAreNotEqualsWithFinally(aNumber, otherNumber, finally, data, ...)    checkConditionWithFinally(CHECK_NOT_EQUALS,   aNumber  != otherNumber, finally, data, __FILE__, __LINE__, __VA_ARGS__)
 
 void inFail(const char * file, int line, const char * fmt, ...);
 void checkCondition(checkType type, int condition, const char * file, int line, const char * fmt, ...);

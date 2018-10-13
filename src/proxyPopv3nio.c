@@ -584,7 +584,7 @@ static void transformInit(const unsigned state, MultiplexorKey key) {
         close(transform->infd[0]);
         dup2(transform->outfd[1], STDOUT_FILENO);
         close(transform->outfd[1]);
-        checkFailWithFinally(execl("/bin/cat", NULL), errorTransformHandler, &key, "Transform fail: cannot fork.");
+        checkFailWithFinally(execl("/bin/cat", "", NULL), errorTransformHandler, &key, "Transform fail: cannot fork.");
     } else {
         transform->slavePid = pid;
         close(transform->infd[0]);
