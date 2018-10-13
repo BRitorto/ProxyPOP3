@@ -34,11 +34,12 @@
 
 static bool done = false;
 
-static void
-sigtermHandler(const int signal) {
-    printf("signal %d, cleaning up and exiting\n",signal);
+static void sigtermHandler(const int signal) {
+    printf("signal %d, cleaning up and exiting\n",signal);//CERRAR LOS SOCKETS PASIVOS
     done = true;
 }
+
+//checkear como hacer para sischild wait y no por todos los hijos
 
 int main(const int argc, const char **argv) {
     loggerSetColor(true);
@@ -50,8 +51,6 @@ int main(const int argc, const char **argv) {
 
     unsigned port = 1110;
     unsigned adminPort = 9090;
-    close(0);
-
 
     const char * err_msg = NULL;
     multiplexorStatus status = MUX_SUCCESS;
@@ -105,8 +104,9 @@ int main(const int argc, const char **argv) {
         goto finally;
     }
 
-    signal(SIGTERM, sigtermHandler);
-    signal(SIGINT,  sigtermHandler);
+    signal(SIGTERM,  sigtermHandler);
+    signal(SIGINT,   sigtermHandler);
+    signal(SIGCHILD, sigChildHandler);
 
     if(fdSetNIO(server) == -1) {
         err_msg = "getting server socket flags";

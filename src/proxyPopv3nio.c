@@ -55,6 +55,14 @@ typedef struct copyStruct {
     struct copyStruct *   other;
 } copyStruct;
 
+typedef struct transformStruct {
+    int             infd[2];
+    int             outfd[2];
+    pid_t           slavePid;
+    bufferADT       readBuffer;
+    bufferADT       writeBuffer;
+} transformStruct;
+
 typedef struct proxyPopv3 {
     int originFd;
     int clientFd;
@@ -65,6 +73,7 @@ typedef struct proxyPopv3 {
     union {
         helloStruct                hello;
         copyStruct                 copy;
+        transformStruct            transform;
     } client;
     /** estados para el origin_fd */
     union {
@@ -239,6 +248,7 @@ static void errorConnectingOriginHandler(void * data) {
         send(clientFd, errorMsg, strlen(errorMsg), MSG_NOSIGNAL);
         close(clientFd);
     }
+    exit(1);
 }
 
 static int connectToOrigin(originServerAddr * originAddr, int clientFd) {
@@ -538,6 +548,111 @@ static unsigned copyWrite(MultiplexorKey key) {
     return ret;
 }
 
+static void errorTransformHandler(void * data) {
+    MultiplexorKey key          = *((MultiplexorKey *) data);
+    transformStruct * transform = &ATTACHMENT(key)->client.transform;
+
+    if(transform->slavePid > 0 && transform->slavePid != getpid()) 
+        kill(transform->slavePid, SIGKILL);
+
+    stateMachineJump(&ATTACHMENT(key)->stm, COPY, key);
+}
+
+static void transformInit(const unsigned state, MultiplexorKey key) {
+    proxyPopv3      * proxy     = ATTACHMENT(key);
+    transformStruct * transform = &proxy->client.transform;
+
+    transform->slavePid = -1;
+    for(int i = 0; i < 2; i++) {
+        transform->infd[i] = -1;
+        transform->outfd[i] = -1;
+    }
+
+    transform->readBuffer   = proxy->readBuffer;
+    transform->writeBuffer  = proxy->writeBuffer;
+
+    checkFailWithFinally(pipe(transform->infd), errorTransformHandler, &key, "Transform fail: cannot open a pipe.");
+    checkFailWithFinally(pipe(transform->outfd), errorTransformHandler, &key, "Transform fail: cannot open a pipe.");
+
+    pid_t pid = fork();
+    checkFailWithFinally(pid, errorTransformHandler, &key, "Transform fail: cannot fork.");
+    if(pid == 0) {
+        close(transform->infd[1]);
+        close(transform->outfd[0]);
+        dup2(transform->infd[0], STDIN_FILENO);
+        close(transform->infd[0]);
+        dup2(transform->outfd[1], STDOUT_FILENO);
+        close(transform->outfd[1]);
+        checkFailWithFinally(excel("/bin/cat", NULL), errorTransformHandler, &key, "Transform fail: cannot fork.");
+    } else {
+        transform->slavePid = pid;
+        close(transform->infd[0]);
+        close(transform->outfd[1]);
+        multiplexorStatus status = registerFd(key->mux, transform->infd[1], &proxyPopv3Handler, WRITE, proxy);
+        checkAreEqualsWithFinally(status, MUX_SUCCESS, errorTransformHandler, &key, "Transform fail: cannot register IN pipe in multiplexor.");
+    }
+}
+
+static unsigned transformRead(MultiplexorKey key) {
+    transformStruct * transform = &ATTACHMENT(key)->client.transform;
+
+    size_t size;
+    ssize_t n;
+    bufferADT buffer = transform->readBuffer;
+    unsigned ret = TRANSFORM;
+
+    uint8_t *ptr = getWritePtr(buffer, &size);
+    n = read(transform->outfd[0], ptr, size);
+    if(n <= 0) {
+        logDebug("Transform done"); //SIGCHILD
+        ret = COPY;
+        setInterest(key->mux, transform->outfd[0], NO_INTEREST);
+    } else {
+        updateWritePtr(buffer, n);
+    }
+    return ret;
+}
+
+static unsigned transformWrite(MultiplexorKey key) {
+    transformStruct * transform = &ATTACHMENT(key)->client.transform;
+
+    size_t size;
+    ssize_t n;
+    bufferADT buffer = transform->readBuffer;
+    unsigned ret = TRANSFORM;
+
+    uint8_t *ptr = getReadPtr(buffer, &size);
+    n = write(transform->infd[1], ptr, size);   //EXPLOTAR, SI MI BUFFER ES MUY GRANDE POSIBLE DEADLOCK, LA APP TAMBIEN HACE WRITE EN EL OTRO PIPE
+    checkFailWithFinally(n, errorTransformHandler, key, "Transform fail: unnable to write in pipe");
+    
+    multiplexorStatus status = registerFd(key->mux, transform->outfd[0], &proxyPopv3Handler, READ, ATTACHMENT(key));
+    checkAreEqualsWithFinally(status, MUX_SUCCESS, errorTransformHandler, &key, "Transform fail: cannot register OUT pipe in multiplexor.");
+
+    logMetric("Coppied from server to transform app, total copied: %lu bytes.", n);
+
+    updateReadPtr(buffer, n);
+    setInterest(key->mux, transform->infd[1], NO_INTEREST);
+    return ret;
+}
+
+static void transformClose(const unsigned state, MultiplexorKey key) {
+    proxyPopv3      * proxy     = ATTACHMENT(key);
+    transformStruct * transform = &proxy->client.transform;
+
+    for(int i = 0; i < 2; i++) {
+        if(transform->infd[i] >= 0) {
+            unregisterFd(key->mux, transform->infd[i]);
+            close(transform->infd[i]);
+        }
+        if(transform->outfd[i] >= 0) {
+            unregisterFd(key->mux, transform->outfd[i]);
+            close(transform->outfd[i]);
+        }
+    }
+    setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE);
+}
+
+
 /* definición de handlers para cada estado */
 static const struct stateDefinition clientStatbl[] = {
     {
@@ -560,6 +675,10 @@ static const struct stateDefinition clientStatbl[] = {
         .onWriteReady     = copyWrite,
     }, {
         .state            = TRANSFORM,
+        .onArrival        = transformInit,
+        .onDeparture      = transformClose,
+        .onReadReady      = transformRead,
+        .onWriteReady     = transformWrite,
     }, {
         .state            = DONE,
 

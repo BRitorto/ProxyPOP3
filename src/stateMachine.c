@@ -25,7 +25,7 @@ inline static void handleFirst(stateMachine stm, MultiplexorKey key) {
     }
 }
 
-inline static void jump(stateMachine stm, unsigned next, MultiplexorKey key) {
+void stateMachineJump(stateMachine stm, unsigned next, MultiplexorKey key) {
     checkGreaterOrEqualsThan(stm->maxState, next, "Error the next state is grather than max state.");
    
     if(stm->current != stm->states + next) {
@@ -45,7 +45,7 @@ unsigned stateMachineHandlerRead(stateMachine stm, MultiplexorKey key) {
     checkIsNotNull(stm->current->onReadReady, "Null pointer on read ready function.");
 
     const unsigned int ret = stm->current->onReadReady(key);
-    jump(stm, ret, key);
+    stateMachineJump(stm, ret, key);
 
     return ret;
 }
@@ -55,7 +55,7 @@ unsigned stateMachineHandlerWrite(stateMachine stm, MultiplexorKey key) {
     checkIsNotNull(stm->current->onWriteReady, "Null pointer on write ready function.");
 
     const unsigned int ret = stm->current->onWriteReady(key);
-    jump(stm, ret, key);
+    stateMachineJump(stm, ret, key);
 
     return ret;
 }
@@ -65,7 +65,7 @@ unsigned stateMachineHandlerBlock(stateMachine stm, MultiplexorKey key) {
     checkIsNotNull(stm->current->onBlockReady, "Null pointer on block ready function.");
 
     const unsigned int ret = stm->current->onBlockReady(key);
-    jump(stm, ret, key);
+    stateMachineJump(stm, ret, key);
 
     return ret;
 }

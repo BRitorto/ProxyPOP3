@@ -47,7 +47,6 @@ void checkConditionWithFinally(checkType type, int condition, finallyFunc finall
 		vlogLogger(LOG_LEVEL_FATAL, file, line, fmt, args);
 		va_end(args);
 		finally(data);
-		exit(1);
 	}
 }
 

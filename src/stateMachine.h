@@ -78,4 +78,6 @@ unsigned stateMachineHandlerBlock(stateMachine stm, MultiplexorKey key);
 /** indica que ocurrió el evento close. retorna nuevo id de nuevo estado. */
 void stateMachineHandlerClose(stateMachine stm, MultiplexorKey key);
 
+void stateMachineJump(stateMachine stm, unsigned next, MultiplexorKey key);
+
 #endif
