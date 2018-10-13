@@ -18,6 +18,8 @@
 #include "errorslib.h"
 #include "multiplexor.h"
 #include "stateMachine.h"
+#include "helloParser.h"
+#include "capaParser.h"
 
 #define BUFFER_SIZE 2048
 
@@ -25,25 +27,25 @@
 
 typedef enum proxyPopv3State {
     HELLO_READ,
-    CHECK_PIPELINIG,
+    CHECK_CAPABILITIES,
     HELLO_WRITE,
     COPY,
+    TRANSFORM,
     DONE,
     ERROR,
 } proxyPopv3State;
 
-typedef enum pipeliningStatus {
-    PIPELINING_NO_CHECKED    = 0,
-    PIPELINING_AVAILABLE     = 1,
-    PIPELINING_NOT_AVAILABLE = 2,
-} pipeliningStatus;
+typedef struct helloStruct {
+    bufferADT          readBuffer;
+    bufferADT          writeBuffer;
+    helloParser        parser;
+} helloStruct;
 
-typedef struct checkPipelining {
-    /** buffer utilizado para I/O */
-    bufferADT           readBuffer;
-    bufferADT           writeBuffer;
-    //pipeliningParser    parser;
-} checkPipelining;
+typedef struct checkCapabilitiesStruct {
+    bufferADT          readBuffer;
+    capabilities       capabilities;
+    capaParser         parser;
+} checkCapabilitiesStruct;
 
 typedef struct copyStruct {
     int *           fd;
@@ -59,16 +61,15 @@ typedef struct proxyPopv3 {
     bufferADT readBuffer;
     bufferADT writeBuffer;
 
-    pipeliningStatus pipeliningStatus;
-
     /** estados para el client_fd */
     union {
-        copyStruct          copy;
+        copyStruct                 copy;
     } client;
     /** estados para el origin_fd */
     union {
-        checkPipelining     checkPipelining;
-        copyStruct          copy;
+        helloStruct                hello;
+        checkCapabilitiesStruct    checkCapabilities;
+        copyStruct                 copy;
     } origin;
 
     /** maquinas de estados */
@@ -109,7 +110,17 @@ static unsigned copyWrite(MultiplexorKey key);
 
 static const struct stateDefinition * proxyPopv3DescribeStates(void);
 
-static pipeliningStatus staticPipeliningStatus = PIPELINING_NO_CHECKED;
+typedef struct conf {
+    int transformation;
+} conf;
+
+static capabilities originCapabilities = { 
+    .pipeliningStatus = CAPA_NO_CHECKED,
+};
+
+static conf proxyConf = { 
+    .transformation = 0,
+};
 
 static const eventHandler proxyPopv3Handler = {
     .read   = proxyPopv3Read,
@@ -122,7 +133,6 @@ static void proxyPopv3Read(MultiplexorKey key) {
     stateMachine stm = &ATTACHMENT(key)->stm;
     const proxyPopv3State state = stateMachineHandlerRead(stm, key);
 
-    logDebug("State: %d", state);
     if(ERROR == state || DONE == state) {
         proxyPopv3Done(key);
     }
@@ -132,8 +142,6 @@ static void proxyPopv3Write(MultiplexorKey key) {
     stateMachine stm = &ATTACHMENT(key)->stm;
     const proxyPopv3State state = stateMachineHandlerWrite(stm, key);
 
-
-    logDebug("State: %d", state);
     if(ERROR == state || DONE == state) {
         proxyPopv3Done(key);
     }
@@ -169,9 +177,9 @@ static void proxyPopv3Done(MultiplexorKey key) {
  * Como tenemos un unico hilo que emite eventos no necesitamos barreras de
  * contención.
  */
-static const unsigned  maxPool  = 50; // tamaño máximo
-static unsigned        poolSize = 0;  // tamaño actual
-static struct proxyPopv3  * pool      = 0;  // pool propiamente dicho
+static const unsigned       maxPool  = 50; // tamaño máximo
+static unsigned             poolSize = 0;  // tamaño actual
+static struct proxyPopv3 *  pool     = 0;  // pool propiamente dicho
 
 static proxyPopv3 * newProxyPopv3(int clientFd, int originFd, size_t bufferSize) {
    
@@ -183,25 +191,19 @@ static proxyPopv3 * newProxyPopv3(int clientFd, int originFd, size_t bufferSize)
         pool      = pool->next;
         ret->next = 0;
     }
-    if(ret == NULL) {
-        goto finally;
-    }
     memset(ret, 0x00, sizeof(*ret));
 
     ret->clientFd = clientFd;
     ret->originFd = originFd;
     ret->readBuffer = createBuffer(bufferSize);
     ret->writeBuffer = createBuffer(bufferSize);
-    
-    ret->pipeliningStatus = staticPipeliningStatus;
 
     ret->stm    .initial   = HELLO_READ;
-    ret->stm    .maxState = ERROR;
+    ret->stm    .maxState  = ERROR;
     ret->stm    .states    = proxyPopv3DescribeStates();
     stateMachineInit(&ret->stm);
 
     ret->references = 1;
-finally:
     return ret;
 }
 
@@ -283,120 +285,101 @@ fail:
 }
 
 static void helloReadInit(const unsigned state, MultiplexorKey key) {
-    proxyPopv3 * proxy      = ATTACHMENT(key);
-    checkPipelining * check = &proxy->origin.checkPipelining;
+    proxyPopv3  * proxy = ATTACHMENT(key);
+    helloStruct * hello = &proxy->origin.hello;
 
-    check->readBuffer   = proxy->readBuffer;
-    check->writeBuffer  = proxy->writeBuffer;
+    helloParserInit(&hello->parser);
+    hello->readBuffer   = proxy->readBuffer;
+    hello->writeBuffer  = proxy->writeBuffer;
 }
 
 /** lee todos los bytes del mensaje de tipo `hello' y inicia su proceso */
 static unsigned helloRead(MultiplexorKey key) {
-    checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
-    unsigned  ret      = HELLO_READ;
+    helloStruct * hello = &ATTACHMENT(key)->origin.hello;
+    unsigned  ret       = HELLO_READ;
+        bool  error     = false;
      uint8_t *writePtr;
       size_t  count;
      ssize_t  n;
+
     logDebug("Server send something");
 
-    writePtr = getWritePtr(check->readBuffer, &count);
+    writePtr = getWritePtr(hello->readBuffer, &count);
     n = recv(key->fd, writePtr, count, 0);
-    logDebug("Server send something");
     if(n > 0) {
-        updateWritePtr(check->readBuffer, n);
-        if(n >= 3) {
-            char * helloOrigin = (char *) getReadPtr(check->readBuffer, &count);
-            if(strncmp(helloOrigin, "+OK", 3) == 0) {
-                if(ATTACHMENT(key)->pipeliningStatus == PIPELINING_NO_CHECKED) {
-                    if(MUX_SUCCESS == setInterestKey(key, WRITE)) 
-                        ret = CHECK_PIPELINIG;
-                    else
-                        ret = ERROR;
-                }
-                else if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
-                    MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {
-                    ret = HELLO_WRITE;
-                }
+        updateWritePtr(hello->readBuffer, n);
+        const helloState state = helloConsume(&hello->parser, hello->readBuffer, hello->writeBuffer, &error);
+        if(error)       //EL SERVIDOR RESPONDIO -ERR O NO SABE POPV3 
+            ret = ERROR;//PODRIA IR A UN ESTADO PARA INFORMAR AL CLIENTE Q PASO, TENGO LA RESPUESTA CAPAS PARTIDA EN LOS DOS BUFFERS DEBERIA LIMPIARLOS
+        else if(helloIsDone(state, 0)) {
+            if(originCapabilities.pipeliningStatus == CAPA_NO_CHECKED) {
+                if(MUX_SUCCESS == setInterestKey(key, WRITE)) 
+                    ret = CHECK_CAPABILITIES;
                 else
                     ret = ERROR;
-                //GUARDO EL MSG DEL ORGIN EN EL BUFFER WRITE PARA MANDARLO AL CLIENTE
-                char * writeHello = (char *) getWritePtr(check->writeBuffer, &count);
-                memcpy(writeHello, helloOrigin, n);
-                updateWritePtr(check->writeBuffer, n);
-                updateReadPtr(check->readBuffer, n);
-            } else {
-                ret = ERROR;
             }
+            else if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
+                MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {
+                ret = HELLO_WRITE;
+            }
+            else
+                return ERROR; 
         }
     } else {
         ret = ERROR;
     }
-
     return ret;
 }
-/*
-static void checkPipeliningInit(const unsigned state, MultiplexorKey key) {
-    checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
 
-    check->readBuffer                      = &(ATTACHMENT(key)->readBuffer);
-    check->writeBuffer                     = &(ATTACHMENT(key)->writeBuffer);
-    check->parser.data                     = &d->method;
-    check->parser.on_authentication_method = on_hello_method, hello_parser_init(
-            &d->parser);
+static void checkCapabilitiesInit(const unsigned state, MultiplexorKey key) {
+    checkCapabilitiesStruct * check = &ATTACHMENT(key)->origin.checkCapabilities;
+
+    check->readBuffer               = check->readBuffer;
+    capaParserInit(&check->parser, &originCapabilities);
 }
 
-static void checkPipeliningClose(const unsigned state, MultiplexorKey key) {
-    checkPipelining check = &ATTACHMENT(key)->origin.checkPipelining;
-
-    hello_parser_close(&d->parser);
-}*/
-
-static unsigned checkPipeliningWrite(MultiplexorKey key) {
+static unsigned checkCapabilitiesWrite(MultiplexorKey key) {
     
-    const char * capaMsg = "CAPA\r\n";
-    unsigned  ret     = CHECK_PIPELINIG;
-      size_t  count = strlen(capaMsg); 
-     ssize_t  n;
+    const char *capaMsg = "CAPA\r\n";
+      unsigned  ret     = CHECK_CAPABILITIES;
+        size_t  count   = strlen(capaMsg); 
+       ssize_t  n;
 
     n = send(key->fd, capaMsg, count, MSG_NOSIGNAL);
     if(n == -1) {
         ret = ERROR;
     } else if(MUX_SUCCESS == setInterestKey(key, READ)) {
-        ret = CHECK_PIPELINIG;
+        ret = CHECK_CAPABILITIES;
     } else {
         ret = ERROR;
     }
     return ret;
 }
 
-static unsigned checkPipeliningRead(MultiplexorKey key) {
+static unsigned checkCapabilitiesRead(MultiplexorKey key) {
      
-    checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
-    unsigned  ret      = CHECK_PIPELINIG;
-    uint8_t *writePtr;// = calloc(256,1);
-    size_t  count;
-    ssize_t  n;
+    checkCapabilitiesStruct * check = &ATTACHMENT(key)->origin.checkCapabilities;
+    unsigned  ret                   = CHECK_CAPABILITIES;
+        bool  error                 = false;
+     uint8_t *writePtr;
+      size_t  count;
+     ssize_t  n;
 
     writePtr = getWritePtr(check->readBuffer, &count);
     n = recv(key->fd, writePtr, count, 0);
-    if(n > 0) {
+    if(n > 0) {   
         updateWritePtr(check->readBuffer, n);
-
-        char * source = (char *) getReadPtr(check->readBuffer, &count);
-        char * dest = malloc(n+1);
-        memcpy(dest, source, n);
-        *(dest+n) = 0;
-
-        updateReadPtr(check->readBuffer, n);
-        logWarn("Capa: %s", dest);
-        staticPipeliningStatus = PIPELINING_AVAILABLE;
-        ATTACHMENT(key)->pipeliningStatus = staticPipeliningStatus;
-
-        if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
-            MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {
-            ret = HELLO_WRITE;
-        } else {
-            ret = ERROR;
+        const capaState state = capaParserConsume(&check->parser, check->readBuffer, &error);
+        if(error)       //EL SERVIDOR RESPONDIO -ERR O NO SABE POPV3
+            ret = ERROR;//PODRIA PROBAR LOS CAPA A MANO O MANDAR POR DEFAULT QUE NO IMPLEMENTA, CAPAS TENGO LA RESPUESTA EN EL BUFFERS DEBERIA LIMPIARLO
+        else if(capaParserIsDone(state, 0)) {
+            if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
+               MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {    
+                logInfo("Capa Pipelining: %s", (originCapabilities.pipeliningStatus == CAPA_AVAILABLE)? "AVAILABLE" : "UNAVAILABLE");
+                ret = HELLO_WRITE;
+            }
+            else
+                ret = ERROR;
         }
     } else {
         ret = ERROR;
@@ -405,27 +388,38 @@ static unsigned checkPipeliningRead(MultiplexorKey key) {
     return ret;
 }
 
+static void helloWriteInit(const unsigned state, MultiplexorKey key) {
+    proxyPopv3  * proxy = ATTACHMENT(key);
+    helloStruct * hello = &proxy->origin.hello;
+
+    hello->readBuffer   = proxy->readBuffer;
+    hello->writeBuffer  = proxy->writeBuffer;
+}
+
 /** escribe todos los bytes de la respuesta al mensaje `hello' */
 static unsigned
 helloWrite(MultiplexorKey key) {
-    //const char * helloMsg = "+OK Como va viejo?\r\n";
-    checkPipelining * check = &ATTACHMENT(key)->origin.checkPipelining;
+    helloStruct * hello = &ATTACHMENT(key)->origin.hello;
     unsigned  ret     = HELLO_WRITE;
       size_t  count;// = strlen(helloMsg); //tamaño del buffer
      ssize_t  n;
-     uint8_t * readPtr = getReadPtr(check->writeBuffer, &count);
+     uint8_t * readPtr;
+     
+    readPtr = getReadPtr(hello->writeBuffer, &count);
     n = send(key->fd, readPtr, count, MSG_NOSIGNAL);
-    if(n == -1) {
+    if(n == -1) 
         ret = ERROR;
-    } else if(MUX_SUCCESS == setInterestKey(key, READ)) {
-        updateReadPtr(check->writeBuffer, n);
-        ret = COPY;
-    } else {
-        ret = ERROR;
+    else {
+        updateReadPtr(hello->writeBuffer, n);
+        if(!canRead(hello->writeBuffer)) {
+            if(MUX_SUCCESS == setInterestKey(key, READ)) 
+                ret = COPY;
+            else 
+                ret = ERROR;
+        }
     }
     return ret;
 
-    return ret;
 }
 
 static void copyInit(const unsigned state, MultiplexorKey key) {
@@ -446,16 +440,16 @@ static void copyInit(const unsigned state, MultiplexorKey key) {
     copy->other        = &(proxy->client.copy);
 }
 
-static fdInterest copyComputeInterests(MultiplexorADT mux, copyStruct * d) {
+static fdInterest copyComputeInterests(MultiplexorADT mux, copyStruct * copy) {
     fdInterest ret = NO_INTEREST;
-    if ((d->duplex & READ)  && canWrite(d->readBuffer))
+    if ((copy->duplex & READ)  && canWrite(copy->readBuffer))
         ret |= READ;
-    if ((d->duplex & WRITE) && canRead(d->writeBuffer)) {
+    if ((copy->duplex & WRITE) && canRead(copy->writeBuffer)) {
         ret |= WRITE;
     }
     logDebug("Computed interest: %d.", ret);
-    if(MUX_SUCCESS != setInterest(mux, *d->fd, ret))
-        fail("Problem trying to set interest: %d,to multiplexor in copy, fd: %d.", ret, *d->fd);
+    if(MUX_SUCCESS != setInterest(mux, *copy->fd, ret))
+        fail("Problem trying to set interest: %d,to multiplexor in copy, fd: %d.", ret, *copy->fd);
     
     return ret;
 }
@@ -494,10 +488,16 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
 
     logDebug("Duplex READ interest: %d.", copy->duplex);
     
-    logMetric("Coppied from %s, total copied: %lu bytes.", (*copy->fd == ATTACHMENT(key)->clientFd)? "client to server" : "server to client", n);
+    if(*copy->fd == ATTACHMENT(key)->originFd && proxyConf.transformation == 1) {
+        ret = TRANSFORM;
+        setInterest(key->mux, ATTACHMENT(key)->originFd, NO_INTEREST);
+        setInterest(key->mux, ATTACHMENT(key)->clientFd, NO_INTEREST);
+    }
+    else {
+        copyComputeInterests(key->mux, copy);
+        copyComputeInterests(key->mux, copy->other);
+    }
 
-    copyComputeInterests(key->mux, copy);
-    copyComputeInterests(key->mux, copy->other);
     if(copy->duplex == NO_INTEREST) {
         ret = DONE;
     }
@@ -527,6 +527,8 @@ static unsigned copyWrite(MultiplexorKey key) {
     }
     logDebug("Duplex WRITE interest: %d.", copy->duplex);
 
+    logMetric("Coppied from %s, total copied: %lu bytes.", (*copy->fd == ATTACHMENT(key)->clientFd)? "client to server" : "server to client", n);
+
     copyComputeInterests(key->mux, copy);
     copyComputeInterests(key->mux, copy->other);
     if(copy->duplex == NO_INTEREST) {
@@ -542,17 +544,21 @@ static const struct stateDefinition clientStatbl[] = {
         .onArrival        = helloReadInit,
         .onReadReady      = helloRead,
     }, {
-        .state            = CHECK_PIPELINIG,
-        .onReadReady      = checkPipeliningRead,
-        .onWriteReady     = checkPipeliningWrite,
+        .state            = CHECK_CAPABILITIES,
+        .onArrival        = checkCapabilitiesInit,
+        .onReadReady      = checkCapabilitiesRead,
+        .onWriteReady     = checkCapabilitiesWrite,
     }, {
         .state            = HELLO_WRITE,
+        .onArrival        = helloWriteInit,
         .onWriteReady     = helloWrite,
     },{
         .state            = COPY,
         .onArrival        = copyInit,
         .onReadReady      = copyReadAndQueue,
         .onWriteReady     = copyWrite,
+    }, {
+        .state            = TRANSFORM,
     }, {
         .state            = DONE,
 
