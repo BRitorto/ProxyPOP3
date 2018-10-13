@@ -11,6 +11,7 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <signal.h>
 
 #include "proxyPopv3nio.h"
 #include "buffer.h"
@@ -583,7 +584,7 @@ static void transformInit(const unsigned state, MultiplexorKey key) {
         close(transform->infd[0]);
         dup2(transform->outfd[1], STDOUT_FILENO);
         close(transform->outfd[1]);
-        checkFailWithFinally(excel("/bin/cat", NULL), errorTransformHandler, &key, "Transform fail: cannot fork.");
+        checkFailWithFinally(execl("/bin/cat", NULL), errorTransformHandler, &key, "Transform fail: cannot fork.");
     } else {
         transform->slavePid = pid;
         close(transform->infd[0]);

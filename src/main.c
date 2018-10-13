@@ -24,6 +24,9 @@
 #include <netinet/tcp.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/wait.h>
+
+
 
 #include "multiplexor.h"
 #include "logger.h"
@@ -109,7 +112,7 @@ int main(const int argc, const char **argv) {
 
     signal(SIGTERM,  sigTermHandler);
     signal(SIGINT,   sigTermHandler);
-    signal(SIGCHILD, sigChildHandler);
+    signal(SIGCHLD, sigChildHandler);
 
     if(fdSetNIO(server) == -1) {
         errMsg = "Getting server socket flags";
@@ -183,24 +186,24 @@ int main(const int argc, const char **argv) {
 
 
     for(;!done;) {
-        err_msg = NULL;
+        errMsg = NULL;
         status = muxSelect(mux);
         if(status != MUX_SUCCESS) {
             errMsg = "Serving";
             goto finally;
         }
     }
-    if(err_msg == NULL) {
+    if(errMsg == NULL) {
         errMsg = "Closing";
     }
 
     int ret = 0;
 finally:
     if(status != MUX_SUCCESS) {
-        fprintf(stderr, "%s: %s\n", (err_msg == NULL) ? "": err_msg, status == MUX_IO_ERROR ? strerror(errno) : multiplexorError(status));
+        fprintf(stderr, "%s: %s\n", (errMsg == NULL) ? "": errMsg, status == MUX_IO_ERROR ? strerror(errno) : multiplexorError(status));
         ret = 2;
-    } else if(err_msg) {
-        perror(err_msg);
+    } else if(errMsg) {
+        perror(errMsg);
         ret = 1;
     }
     if(mux != NULL) {
