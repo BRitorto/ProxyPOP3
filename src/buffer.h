@@ -9,6 +9,8 @@ typedef struct bufferCDT * bufferADT;
 
 bufferADT createBuffer(const size_t size);
 
+bufferADT createBackUpBuffer(bufferADT buffer);
+
 void reset(bufferADT buffer);
 
 bool canWrite(bufferADT buffer);

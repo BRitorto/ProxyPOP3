@@ -55,8 +55,8 @@ int main(const int argc, const char **argv) {
 	int fds[] = {-1, -1, -1, -1, -1, -1, -1};
 	loggerSetFdsByLevel(fds);	
 
-    unsigned port = 1110;
-    unsigned adminPort = 9090;
+    unsigned port = 1114;
+    unsigned adminPort = 9094;
 
     const char * errMsg = NULL;
     multiplexorStatus status = MUX_SUCCESS;
@@ -156,7 +156,7 @@ int main(const int argc, const char **argv) {
     };
 
     ///////datos de origin harcodeados
-    in_port_t originPort = 110;
+    in_port_t originPort = 9898;
     originServerAddr originAddr;
     memset(&(originAddr.ipv4), 0, sizeof(originAddr.ipv4));
 

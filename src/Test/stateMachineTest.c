@@ -13,7 +13,7 @@ enum test_states {
 };
 
 struct data {
-    bool arrived  [3];
+    bool arrived[3];
     bool departed[3];
     unsigned i;
 };
@@ -46,21 +46,21 @@ static unsigned onWriteReady(MultiplexorKey key) {
 
 static const struct stateDefinition statbl[] = {
     {
-        .state          = A,
-        .onArrival     = onArrival,
-        .onDeparture   = onDeparture,
+        .state        = A,
+        .onArrival    = onArrival,
+        .onDeparture  = onDeparture,
         .onReadReady  = onReadReady,
         .onWriteReady = onWriteReady,
     },{
-        .state          = B,
-        .onArrival     = onArrival,
-        .onDeparture   = onDeparture,
+        .state        = B,
+        .onArrival    = onArrival,
+        .onDeparture  = onDeparture,
         .onReadReady  = onReadReady,
         .onWriteReady = onWriteReady,
     },{
-        .state          = C,
-        .onArrival     = onArrival,
-        .onDeparture   = onDeparture,
+        .state        = C,
+        .onArrival    = onArrival,
+        .onDeparture  = onDeparture,
         .onReadReady  = onReadReady,
         .onWriteReady = onWriteReady,
     }
@@ -69,7 +69,7 @@ static const struct stateDefinition statbl[] = {
 void testStateMachine (CuTest* tc) {
     struct stateMachineCDT stm = {
         .initial   = A,
-        .maxState = C,
+        .maxState  = C,
         .states    = statbl,
     };
     struct data data = {
@@ -96,7 +96,7 @@ void testStateMachine (CuTest* tc) {
     CuAssertIntEquals(tc, false, data.departed[B]);
     CuAssertIntEquals(tc, false, data.departed[C]);
 
-    /*stateMachineHandlerWrite(&stm, &key);
+    stateMachineHandlerWrite(&stm, &key);
     CuAssertIntEquals(tc, C,     getState(&stm));
     CuAssertIntEquals(tc, true,  data.arrived[A]);
     CuAssertIntEquals(tc, true,  data.arrived[B]);
@@ -109,12 +109,12 @@ void testStateMachine (CuTest* tc) {
     CuAssertIntEquals(tc, C,     getState(&stm));
     CuAssertIntEquals(tc, true,  data.arrived[A]);
     CuAssertIntEquals(tc, true,  data.arrived[B]);
-    CuAssertIntEquals(tc,true,  data.arrived[C]);
+    CuAssertIntEquals(tc, true,  data.arrived[C]);
     CuAssertIntEquals(tc, true,  data.departed[A]);
     CuAssertIntEquals(tc, true,  data.departed[B]);
     CuAssertIntEquals(tc, false, data.departed[C]);
 
-    stateMachineHandlerClose(&stm, &key);*/
+    stateMachineHandlerClose(&stm, &key);
 }
 
 

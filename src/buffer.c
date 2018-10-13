@@ -20,6 +20,20 @@ bufferADT createBuffer(const size_t size)
 	return buffer;
 }
 
+bufferADT createBackUpBuffer(bufferADT buffer)
+{
+	size_t size, count;
+	uint8_t * readPtr;
+	
+	size = buffer->limitPtr - buffer->dataPtr;
+	bufferADT bufferCopy = createBuffer(size);
+
+	readPtr = getReadPtr(buffer, &count);
+	memcpy(bufferCopy->writePtr, readPtr, count);
+	updateWritePtr(bufferCopy, count);
+	return bufferCopy;
+}
+
 inline void reset(bufferADT buffer)
 {
 	if(buffer == NULL)

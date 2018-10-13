@@ -519,7 +519,7 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
 
 static unsigned copyWrite(MultiplexorKey key) {
     copyStruct * copy = copyPtr(key);
-    checkAreEquals(*copy->fd, key->fd, "Copy destination and source have the same file descriptor.");
+    checkAreEquals(*copy->fd, key->fd, "Must be equals both destinations file descriptors.");
 
     size_t size;
     ssize_t n;
@@ -551,10 +551,6 @@ static unsigned copyWrite(MultiplexorKey key) {
 
 static void errorTransformHandler(void * data) {
     MultiplexorKey key          = *((MultiplexorKey *) data);
-    transformStruct * transform = &ATTACHMENT(key)->client.transform;
-
-    if(transform->slavePid > 0 && transform->slavePid != getpid()) 
-        kill(transform->slavePid, SIGKILL);
 
     stateMachineJump(&ATTACHMENT(key)->stm, COPY, key);
 }
@@ -569,8 +565,8 @@ static void transformInit(const unsigned state, MultiplexorKey key) {
         transform->outfd[i] = -1;
     }
 
-    transform->readBuffer   = proxy->readBuffer;
-    transform->writeBuffer  = proxy->writeBuffer;
+    transform->readBuffer   = createBackUpBuffer(proxy->writeBuffer);
+    transform->writeBuffer  = createBackUpBuffer(proxy->readBuffer);
 
     checkFailWithFinally(pipe(transform->infd), errorTransformHandler, &key, "Transform fail: cannot open a pipe.");
     checkFailWithFinally(pipe(transform->outfd), errorTransformHandler, &key, "Transform fail: cannot open a pipe.");
@@ -584,11 +580,13 @@ static void transformInit(const unsigned state, MultiplexorKey key) {
         close(transform->infd[0]);
         dup2(transform->outfd[1], STDOUT_FILENO);
         close(transform->outfd[1]);
-        checkFailWithFinally(execl("/bin/cat", "", NULL), errorTransformHandler, &key, "Transform fail: cannot fork.");
+        checkFailWithFinally(system("cat"), errorTransformHandler, &key, "Transform fail: cannot execl.");
     } else {
         transform->slavePid = pid;
         close(transform->infd[0]);
         close(transform->outfd[1]);
+        transform->infd[0] = -1;
+        transform->outfd[1] = -1;
         multiplexorStatus status = registerFd(key->mux, transform->infd[1], &proxyPopv3Handler, WRITE, proxy);
         checkAreEqualsWithFinally(status, MUX_SUCCESS, errorTransformHandler, &key, "Transform fail: cannot register IN pipe in multiplexor.");
     }
@@ -604,13 +602,14 @@ static unsigned transformRead(MultiplexorKey key) {
 
     uint8_t *ptr = getWritePtr(buffer, &size);
     n = read(transform->outfd[0], ptr, size);
-    if(n <= 0) {
-        logDebug("Transform done"); //SIGCHILD
+    if(n >= 0) {
         ret = COPY;
         setInterest(key->mux, transform->outfd[0], NO_INTEREST);
-    } else {
-        updateWritePtr(buffer, n);
+        updateWritePtr(buffer, n);    
+        logMetric("Coppied from transform app to proxy, total copied: %lu bytes.", n);
     }
+    else   
+        ret = ERROR;
     return ret;
 }
 
@@ -630,7 +629,7 @@ static unsigned transformWrite(MultiplexorKey key) {
     checkAreEqualsWithFinally(status, MUX_SUCCESS, errorTransformHandler, &key, "Transform fail: cannot register OUT pipe in multiplexor.");
 
     logMetric("Coppied from proxy to transform app, total copied: %lu bytes.", n);
-
+    
     updateReadPtr(buffer, n);
     setInterest(key->mux, transform->infd[1], NO_INTEREST);
     return ret;
@@ -639,6 +638,11 @@ static unsigned transformWrite(MultiplexorKey key) {
 static void transformClose(const unsigned state, MultiplexorKey key) {
     proxyPopv3      * proxy     = ATTACHMENT(key);
     transformStruct * transform = &proxy->client.transform;
+
+    if(transform->slavePid > 0) 
+        kill(transform->slavePid, SIGKILL);
+    if(transform->slavePid == -1)
+        exit(1);
 
     for(int i = 0; i < 2; i++) {
         if(transform->infd[i] >= 0) {
@@ -650,6 +654,11 @@ static void transformClose(const unsigned state, MultiplexorKey key) {
             close(transform->outfd[i]);
         }
     }
+    deleteBuffer(proxy->readBuffer);
+    proxy->readBuffer = transform->writeBuffer;
+    deleteBuffer(transform->readBuffer);
+    
+    logDebug("Transform done");
     setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE);
 }
 

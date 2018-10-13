@@ -35,7 +35,7 @@ void stateMachineJump(stateMachine stm, unsigned next, MultiplexorKey key) {
         stm->current = stm->states + next;
 
         if(NULL != stm->current->onArrival) {
-            stm->current->onArrival(stm->current->state, key);
+            stm->current->onArrival(stm->current->state, key); //Podriamos especializar las transiciones si mandamos el estado del que venimos
         }
     }
 }
