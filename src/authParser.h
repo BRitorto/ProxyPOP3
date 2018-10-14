@@ -8,8 +8,11 @@
 
 
 typedef enum authState {
-    AUTH_INDICATOR,
+	AUTH_INITIAL,
+    AUTH_USER_INDICATOR,
+    AUTH_APOP_INDICATOR,
     AUTH_USER,
+    AUTH_DIGEST,
     AUTH_CRLF,
     AUTH_DONE,
     AUTH_ERROR,
@@ -26,7 +29,7 @@ typedef struct authParser {
 void authParserInit(authParser * parser);
 
 /** entrega un byte al parser. retorna true si se llego al final  */
-authState authParserFeed(authParser * parser, uint8_t c);
+authState authParserFeed(authParser * parser, uint8_t c, bool * apop);
 
 /**
  * por cada elemento del buffer llama a `authParserFeed' hasta que

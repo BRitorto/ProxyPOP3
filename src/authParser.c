@@ -11,31 +11,54 @@
 #define MAX_MSG_SIZE 512
 
 static const char * userIndicatorMsg = "USER";
-static const size_t userIndicatorMsgSize = 4;
+static const char * apopIndicatorMsg = "APOP";
+static const size_t indicatorMsgSize = 4;
+
 
 static const char * crlfMsg = "\r\n";
 
 void authParserInit(authParser * parser) {
-    parser->state     = AUTH_INDICATOR;
+    parser->state     = AUTH_INITIAL;
     parser->msgSize   = 0;
 }
 
-authState authParserFeed(authParser * parser, uint8_t c) {
+authState authParserFeed(authParser * parser, uint8_t c, bool * apop) {
     switch(parser->state) {
-        case AUTH_INDICATOR:
+        case AUTH_INITIAL:
+            if(c == 'U' || c == 'u')
+                parser->state = AUTH_USER_INDICATOR;
+            else if (c == 'A' || c == 'a') {
+                parser->state = AUTH_APOP_INDICATOR;
+                *apop = true;
+            }
+            else
+                parser->state = AUTH_ERROR;
+            break;
+        case AUTH_USER_INDICATOR:
             if(c != userIndicatorMsg[parser->msgSize])
                 parser->state = AUTH_ERROR;
-            else if(parser->msgSize == userIndicatorMsgSize) {
+            else if(parser->msgSize == indicatorMsgSize) {
                 if(c == ' ')
                     parser->state = AUTH_USER;
                 else
                     parser->state = AUTH_ERROR;
             }
             break;
-
+        case AUTH_APOP_INDICATOR:
+            if(c != apopIndicatorMsg[parser->msgSize])
+                parser->state = AUTH_ERROR;
+            else if(parser->msgSize == indicatorMsgSize) {
+                if(c == ' ')
+                    parser->state = AUTH_USER;
+                else
+                    parser->state = AUTH_ERROR;
+            }
+            break;
         case AUTH_USER:
             if(c == crlfMsg[0])
                 parser->state = AUTH_CRLF;
+            else if (c == ' ' && *apop)
+                parser->state = AUTH_DIGEST;
             break;
 
         case AUTH_CRLF:
@@ -44,7 +67,10 @@ authState authParserFeed(authParser * parser, uint8_t c) {
             else
                 parser->state = AUTH_ERROR;
             break;
-
+        case AUTH_DIGEST:
+            if(c == crlfMsg[0])
+                parser->state = AUTH_CRLF;
+            break;
         case AUTH_DONE:
         case AUTH_ERROR:
             // nada que hacer, nos quedamos en este estado
@@ -78,12 +104,13 @@ bool authIsDone(const authState state, bool * errored) {
 authState authConsume(authParser * parser, bufferADT readBuffer, 
                         bufferADT writeBuffer, bool * errored, char * user) {
     authState state = parser->state;
-    char currentUser[MAX_MSG_SIZE - userIndicatorMsgSize - 2];
+    char currentUser[MAX_MSG_SIZE - indicatorMsgSize - 2];
     int i = 0;
+    bool apop = false;
 
     while(canRead(readBuffer) && canWrite(writeBuffer)) {
         const uint8_t c = readAByte(readBuffer);
-        state = authParserFeed(parser, c);
+        state = authParserFeed(parser, c, &apop);
         if(state == AUTH_USER)
             currentUser[i++] = c;
         writeAByte(writeBuffer, c);
