@@ -409,8 +409,7 @@ static void authInit(const unsigned state, MultiplexorKey key) {
     logDebug("AuthInit");
 }
 
-/** lee todos los bytes del mensaje de tipo `hello' y inicia su proceso */
-static unsigned authInitRead(MultiplexorKey key) {
+static unsigned authRead(MultiplexorKey key) {
     authStruct * auth = &ATTACHMENT(key)->client.auth;
     unsigned  ret       = AUTH;
         bool  error     = false;
@@ -423,7 +422,7 @@ static unsigned authInitRead(MultiplexorKey key) {
     n = recv(key->fd, writePtr, count, 0);
     if(n > 0) {
         updateWritePtr(auth->readBuffer, n);
-        const authState state = authConsume(&auth->parser, auth->readBuffer, auth->writeBuffer, auth->user, &auth->authType, &error);
+        const authState state = authConsume(&auth->parser, auth->readBuffer, auth->writeBuffer, auth->user, &auth->type, &error);
         if(authInitIsDone(state, 0)) {
             if(MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, NO_INTEREST) &&
                MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->originFd, WRITE)) {
@@ -438,12 +437,12 @@ static unsigned authInitRead(MultiplexorKey key) {
     return ret;
 }
 
-static unsigned authInitWrite(MultiplexorKey key) {
+static unsigned authWrite(MultiplexorKey key) {
     authStruct * auth = &ATTACHMENT(key)->client.auth;
     size_t size;
     ssize_t n;
     bufferADT buffer = auth->writeBuffer;
-    unsigned ret = AUTH_INIT;
+    unsigned ret = AUTH;
 
     uint8_t * ptr = getReadPtr(buffer, &size);
     n = send(key->fd, ptr, size, MSG_NOSIGNAL);
@@ -455,9 +454,9 @@ static unsigned authInitWrite(MultiplexorKey key) {
 
             if(MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->originFd, NO_INTEREST) &&
                MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, READ)) {
-                if(auth->authType == USER_AUTH)
+                if(auth->type == USER_AUTH)
                     ret = AUTH_COMPLETE;
-                else if(auth->authType == APOP_AUTH)
+                else if(auth->type == APOP_AUTH)
                     ret = COPY;
                 else   
                     ret = ERROR;
@@ -489,10 +488,10 @@ static void copyInit(const unsigned prevState, MultiplexorKey key) {
     copy->other        = &(proxy->client.copy);
     copy->nextState    = COPY; 
 
-    if(prevState == AUTH_INIT) 
-        copy->nextState = AUTH_INIT;
+    if(prevState == AUTH) 
+        copy->nextState = AUTH;
     else if(prevState == CHECK_CAPABILITIES || prevState == HELLO_READ)
-        copy->other->nextState = AUTH_INIT;
+        copy->other->nextState = AUTH;
 }
 
 static fdInterest copyComputeInterests(MultiplexorADT mux, copyStruct * copy) {

@@ -52,7 +52,7 @@ static void sigChildHandler(const int signal) {
     while(waitpid(-1, 0, WNOHANG) != -1);
 }
 
-static char * stdErrorFilePath;
+static char * stdErrorFilePath = "/dev/null";
 
 static char * defaultReplaceMsg = "Parte remplazada";
 

@@ -6,6 +6,11 @@
 
 #include "buffer.h"
 
+typedef enum authType {
+    USER_AUTH,
+    APOP_AUTH,
+    UNKNOWN_AUTH,
+} authType;
 
 typedef enum authState {
 	AUTH_INITIAL,
@@ -29,7 +34,7 @@ typedef struct authParser {
 void authParserInit(authParser * parser);
 
 /** entrega un byte al parser. retorna true si se llego al final  */
-authState authParserFeed(authParser * parser, uint8_t c, bool * apop);
+authState authParserFeed(authParser * parser, uint8_t c, authType * type);
 
 /**
  * por cada elemento del buffer llama a `authParserFeed' hasta que
@@ -38,7 +43,7 @@ authState authParserFeed(authParser * parser, uint8_t c, bool * apop);
  * @param errored parametro de salida. si es diferente de NULL se deja dicho
  *   si el parsing se debió a una condición de error
  */
-authState helloConsume(authParser * parser, bufferADT readBuffer, bufferADT writeBuffer, bool * errored, char * user);
+authState authConsume(authParser * parser, bufferADT readBuffer, bufferADT writeBuffer, char * user, authType type, bool * errored);
 
 /**
  * Permite distinguir a quien usa helloParserFeed si debe seguir
