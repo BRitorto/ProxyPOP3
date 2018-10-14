@@ -27,15 +27,16 @@ inline static void handleFirst(stateMachine stm, MultiplexorKey key) {
 
 void stateMachineJump(stateMachine stm, unsigned next, MultiplexorKey key) {
     checkGreaterOrEqualsThan(stm->maxState, next, "Error the next state is grather than max state.");
-   
+    unsigned prevState = stm->current->state;
+
     if(stm->current != stm->states + next) {
         if(stm->current != NULL && stm->current->onDeparture != NULL) {
             stm->current->onDeparture(stm->current->state, key);
         }
         stm->current = stm->states + next;
-
+        
         if(NULL != stm->current->onArrival) {
-            stm->current->onArrival(stm->current->state, key); //Podriamos especializar las transiciones si mandamos el estado del que venimos
+            stm->current->onArrival(prevState, key); //Podriamos especializar las transiciones si mandamos el estado del que venimos
         }
     }
 }

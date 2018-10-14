@@ -29,7 +29,7 @@
 typedef enum proxyPopv3State {
     HELLO_READ,
     CHECK_CAPABILITIES,
-    HELLO_WRITE,
+    AUTH,
     COPY,
     TRANSFORM,
     DONE,
@@ -37,31 +37,32 @@ typedef enum proxyPopv3State {
 } proxyPopv3State;
 
 typedef struct helloStruct {
-    bufferADT          readBuffer;
-    bufferADT          writeBuffer;
-    helloParser        parser;
+    bufferADT           readBuffer;
+    bufferADT           writeBuffer;
+    helloParser         parser;
 } helloStruct;
 
 typedef struct checkCapabilitiesStruct {
-    bufferADT          readBuffer;
-    capabilities       capabilities;
-    capaParser         parser;
+    bufferADT           readBuffer;
+    capabilities        capabilities;
+    capaParser          parser;
 } checkCapabilitiesStruct;
 
 typedef struct copyStruct {
-    int *           fd;
-    bufferADT       readBuffer;
-    bufferADT       writeBuffer;
-    fdInterest      duplex;
-    struct copyStruct *   other;
+    int *               fd;
+    bufferADT           readBuffer;
+    bufferADT           writeBuffer;
+    fdInterest          duplex;
+    proxyPopv3State     nextState;
+    struct copyStruct * other;
 } copyStruct;
 
 typedef struct transformStruct {
-    int             infd[2];
-    int             outfd[2];
-    pid_t           slavePid;
-    bufferADT       readBuffer;
-    bufferADT       writeBuffer;
+    int                 infd[2];
+    int                 outfd[2];
+    pid_t               slavePid;
+    bufferADT           readBuffer;
+    bufferADT           writeBuffer;
 } transformStruct;
 
 typedef struct proxyPopv3 {
@@ -69,6 +70,7 @@ typedef struct proxyPopv3 {
     int clientFd;
     bufferADT readBuffer;
     bufferADT writeBuffer;
+    char user[256];
 
     /** estados para el clientFd */
     union {
@@ -332,7 +334,7 @@ static unsigned helloRead(MultiplexorKey key) {
             }
             else if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
                 MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {
-                ret = HELLO_WRITE;
+                ret = COPY;
             }
             else
                 return ERROR; 
@@ -351,7 +353,7 @@ static void checkCapabilitiesInit(const unsigned state, MultiplexorKey key) {
 }
 
 static unsigned checkCapabilitiesWrite(MultiplexorKey key) {
-    
+    proxyPopv3 * proxy = ATTACHMENT(key);
     const char *capaMsg = "CAPA\r\n";
       unsigned  ret     = CHECK_CAPABILITIES;
         size_t  count   = strlen(capaMsg); 
@@ -388,7 +390,7 @@ static unsigned checkCapabilitiesRead(MultiplexorKey key) {
             if(MUX_SUCCESS == setInterestKey(key, NO_INTEREST) &&
                MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE)) {    
                 logInfo("Capa Pipelining: %s", (originCapabilities.pipeliningStatus == CAPA_AVAILABLE)? "AVAILABLE" : "UNAVAILABLE");
-                ret = HELLO_WRITE;
+                ret = COPY;         //HELLO_WRITE, tengo la respuesta del hello en el buffer
             }
             else
                 ret = ERROR;
@@ -400,41 +402,75 @@ static unsigned checkCapabilitiesRead(MultiplexorKey key) {
     return ret;
 }
 
-static void helloWriteInit(const unsigned state, MultiplexorKey key) {
-    proxyPopv3  * proxy = ATTACHMENT(key);
-    helloStruct * hello = &proxy->client.hello;
+static void authInit(const unsigned state, MultiplexorKey key) {
+    authStruct * auth = &ATTACHMENT(key)->client.auth;
 
-    hello->readBuffer   = proxy->readBuffer;
-    hello->writeBuffer  = proxy->writeBuffer;
+    auth->user = ATTACHMENT(key)->user;
+    logDebug("AuthInit");
 }
 
-/** escribe todos los bytes de la respuesta al mensaje `hello' */
-static unsigned
-helloWrite(MultiplexorKey key) {
-    helloStruct * hello = &ATTACHMENT(key)->origin.hello;
-    unsigned  ret     = HELLO_WRITE;
-      size_t  count;// = strlen(helloMsg); //tamaño del buffer
+/** lee todos los bytes del mensaje de tipo `hello' y inicia su proceso */
+static unsigned authInitRead(MultiplexorKey key) {
+    authStruct * auth = &ATTACHMENT(key)->client.auth;
+    unsigned  ret       = AUTH;
+        bool  error     = false;
+     uint8_t *writePtr;
+      size_t  count;
      ssize_t  n;
-     uint8_t * readPtr;
-     
-    readPtr = getReadPtr(hello->writeBuffer, &count);
-    n = send(key->fd, readPtr, count, MSG_NOSIGNAL);
-    if(n == -1) 
-        ret = ERROR;
-    else {
-        updateReadPtr(hello->writeBuffer, n);
-        if(!canRead(hello->writeBuffer)) {
-            if(MUX_SUCCESS == setInterestKey(key, READ)) 
+
+
+    writePtr = getWritePtr(auth->readBuffer, &count);
+    n = recv(key->fd, writePtr, count, 0);
+    if(n > 0) {
+        updateWritePtr(auth->readBuffer, n);
+        const authState state = authConsume(&auth->parser, auth->readBuffer, auth->writeBuffer, auth->user, &auth->authType, &error);
+        if(authInitIsDone(state, 0)) {
+            if(MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, NO_INTEREST) &&
+               MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->originFd, WRITE)) {
                 ret = COPY;
-            else 
-                ret = ERROR;
+            }
+            else
+                return ERROR; 
         }
+    } else {
+        ret = ERROR;
     }
     return ret;
-
 }
 
-static void copyInit(const unsigned state, MultiplexorKey key) {
+static unsigned authInitWrite(MultiplexorKey key) {
+    authStruct * auth = &ATTACHMENT(key)->client.auth;
+    size_t size;
+    ssize_t n;
+    bufferADT buffer = auth->writeBuffer;
+    unsigned ret = AUTH_INIT;
+
+    uint8_t * ptr = getReadPtr(buffer, &size);
+    n = send(key->fd, ptr, size, MSG_NOSIGNAL);
+    if(n > 0) {
+        const helloState state = helloConsume(&hello->parser, auth->writeBuffer, &error);
+        if(error)       //EL SERVIDOR RESPONDIO -ERR O NO SABE POPV3 
+            ret = ERROR;//PODRIA IR A UN ESTADO PARA INFORMAR AL CLIENTE Q PASO, TENGO LA RESPUESTA CAPAS PARTIDA EN LOS DOS BUFFERS DEBERIA LIMPIARLOS
+        else if(helloIsDone(state, 0)) {
+
+            if(MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->originFd, NO_INTEREST) &&
+               MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, READ)) {
+                if(auth->authType == USER_AUTH)
+                    ret = AUTH_COMPLETE;
+                else if(auth->authType == APOP_AUTH)
+                    ret = COPY;
+                else   
+                    ret = ERROR;
+            }
+            else
+                return ERROR; 
+        }
+    }
+
+    return ret;
+}
+
+static void copyInit(const unsigned prevState, MultiplexorKey key) {
     struct proxyPopv3 * proxy = ATTACHMENT(key);
 
     copyStruct * copy  = &(proxy->client.copy);
@@ -443,6 +479,7 @@ static void copyInit(const unsigned state, MultiplexorKey key) {
     copy->writeBuffer  = proxy->writeBuffer;
     copy->duplex       = READ | WRITE;
     copy->other        = &(proxy->origin.copy);
+    copy->nextState    = COPY; 
 
     copy               = &(proxy->origin.copy);
     copy->fd           = &(proxy->originFd);
@@ -450,6 +487,12 @@ static void copyInit(const unsigned state, MultiplexorKey key) {
     copy->writeBuffer  = proxy->readBuffer;
     copy->duplex       = READ | WRITE;
     copy->other        = &(proxy->client.copy);
+    copy->nextState    = COPY; 
+
+    if(prevState == AUTH_INIT) 
+        copy->nextState = AUTH_INIT;
+    else if(prevState == CHECK_CAPABILITIES || prevState == HELLO_READ)
+        copy->other->nextState = AUTH_INIT;
 }
 
 static fdInterest copyComputeInterests(MultiplexorADT mux, copyStruct * copy) {
@@ -482,7 +525,7 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
     size_t size;
     ssize_t n;
     bufferADT buffer = copy->readBuffer;
-    unsigned ret = COPY;
+    unsigned ret = copy->nextState;
 
     uint8_t *ptr = getWritePtr(buffer, &size);
     n = recv(key->fd, ptr, size, 0);
@@ -524,7 +567,7 @@ static unsigned copyWrite(MultiplexorKey key) {
     size_t size;
     ssize_t n;
     bufferADT buffer = copy->writeBuffer;
-    unsigned ret = COPY;
+    unsigned ret = copy->nextState;
 
     uint8_t *ptr = getReadPtr(buffer, &size);
     n = send(key->fd, ptr, size, MSG_NOSIGNAL);
