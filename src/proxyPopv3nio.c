@@ -70,13 +70,13 @@ typedef struct proxyPopv3 {
     bufferADT readBuffer;
     bufferADT writeBuffer;
 
-    /** estados para el client_fd */
+    /** estados para el clientFd */
     union {
         helloStruct                hello;
         copyStruct                 copy;
         transformStruct            transform;
     } client;
-    /** estados para el origin_fd */
+    /** estados para el originFd */
     union {
         helloStruct                hello;
         checkCapabilitiesStruct    checkCapabilities;
