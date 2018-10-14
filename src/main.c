@@ -16,7 +16,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <signal.h>
-
+#include <ctype.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h> 
@@ -34,7 +34,12 @@
 #include "proxyPopv3nio.h"
 #include "adminnio.h"
 
+#define HAS_REQUIRED_ARGUMENTS(k) ((k) == 'e' || (k) == 'l' || (k) == 'L' || (k) == 'm' || (k) == 'M' || (k) == 'o' || (k) == 'p' || (k) == 'P' || (k) == 't')
+
+
 #define BACKLOG 20
+#define VERSION_NUMBER "1.0"
+
 
 static bool done = false;
 
@@ -47,17 +52,132 @@ static void sigChildHandler(const int signal) {
     while(waitpid(-1, 0, WNOHANG) != -1);
 }
 
+static char * stdErrorFilePath;
 
-int main(const int argc, const char **argv) {
+static char * defaultReplaceMsg = "Parte remplazada";
+
+static char * replaceMsg = NULL;
+
+static unsigned adminPort = 9090;
+
+static unsigned port = 1110;
+
+static in_port_t originPort = 110;
+
+static char * transformCommand = NULL;
+
+static void help(int argc) {
+    if(argc == 2) {
+        printf("Pop3Filter Help\n\nOptions:\n\t-e <error-file> : set the file for stderr.\n\t-h for help.\n\t-l <pop3-address> : set the address for pop3Filter service\n\t-L <admin-address> : set the address for management service.\n\t-m <replace-message> : set the replace message for the transformation.\n\t-M <media-range> : list of media types for transformation.\n\t-o <management-port> : set the port for management service.\n\t-p <local-port> : set the port of service Pop3Filter\n\t-P <origin-port> : set the port of the origin server.\n\t-t <command> the command for transformations.\n\t-v to get the version number of the Pop3Filter.\n\n");
+        exit(0);
+    }
+    fprintf(stderr, "Invalid use of -h option.\n");
+    exit(1);
+}
+
+static void setReplaceMsg(char * arg) {
+    replaceMsg = arg;
+}
+
+static void printVersion(int argc) {
+    if(argc == 2) {
+        printf("Pop3Filter Version: %s\n", VERSION_NUMBER);
+        exit(0);
+    }
+    fprintf(stderr, "Invalid use of -v option.\n");
+    exit(1);
+}
+
+static void parseOptionArguments(int argc, const char * argv[]) {
+    if(argc < 2) {
+        fprintf(stderr, "Pop3filter -Invalid Arguments\n");
+        exit(1);
+    }
+    int optionArg;
+    while ((optionArg = getopt(argc, (char * const *)argv, "e:hl:L:m:M:o:p:P:t:v")) != -1) {
+
+        switch(optionArg) {
+            case 'e':
+                stdErrorFilePath = optarg;
+                break;
+            case 'h':
+                help(argc);
+                break;
+            case 'l':
+
+                break;
+            case 'L':
+
+                break;
+            case 'm':
+                setReplaceMsg(optarg);
+                break;
+            case 'M':
+
+                break;
+            case 'o':
+                adminPort = atoi(optarg);
+                break;
+            case 'p':
+                port = atoi(optarg);
+                break;
+            case 'P':
+                originPort = atoi(optarg);
+                break;
+            case 't':
+                transformCommand = optarg;
+                break;
+            case 'v':
+                printVersion(argc);
+                break;
+            case '?':
+                if (HAS_REQUIRED_ARGUMENTS(optopt))
+                    fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+                else if (isprint (optopt))
+                    fprintf (stderr, "Unknown option `-%c'.\n", optopt); 
+                else
+                    fprintf (stderr,"Unknown option character `\\x%x'.\n", optopt); 
+                break;
+            default:
+                fprintf(stderr, "Pop3filter -Invalid Options\n");
+                exit(1);
+                break;
+        }
+    }
+    if(argc - optind != 1) {
+        fprintf(stderr, "Pop3filter -Invalid Arguments\n");
+        exit(1);
+    }
+
+    bool nonOptionArgFlag = false;
+    for (int index = optind; index < argc-1; index++) {
+        printf ("Non-option argument %s\n", argv[index]);
+        nonOptionArgFlag = true;
+    }
+    if(nonOptionArgFlag)
+        exit(1);
+
+    //por ahora print, hay q saber si es ipv4, ipv6 o fqdn
+    printf("Origin Server Address: %s\n",argv[optind] );
+
+    if(replaceMsg == NULL)
+        replaceMsg = defaultReplaceMsg;
+}
+
+static void loggerInit(void) {
     loggerSetColor(true);
-	loggerSetQuiet(false);
-	loggerSetColor(true);
-	loggerSetLevel(LOG_LEVEL_TRACE);
-	int fds[] = {-1, -1, -1, -1, -1, -1, -1};
-	loggerSetFdsByLevel(fds);	
+    loggerSetQuiet(false);
+    loggerSetColor(true);
+    loggerSetLevel(LOG_LEVEL_TRACE);
+    int fds[] = {-1, -1, -1, -1, -1, -1, -1};
+    loggerSetFdsByLevel(fds);
+}
 
-    unsigned port = 1114;
-    unsigned adminPort = 9094;
+int main(const int argc, const char ** argv) {
+    
+    loggerInit();
+
+    parseOptionArguments(argc, argv);	   
 
     const char * errMsg = NULL;
     multiplexorStatus status = MUX_SUCCESS;
@@ -157,7 +277,6 @@ int main(const int argc, const char **argv) {
     };
 
     ///////datos de origin harcodeados
-    in_port_t originPort = 9898;
     originServerAddr originAddr;
     memset(&(originAddr.ipv4), 0, sizeof(originAddr.ipv4));
 

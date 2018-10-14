@@ -31,6 +31,5 @@ test:
 
 run:
 	./Test/AllTests.out
-	./main.out
 
 .PHONY: clean  all  test

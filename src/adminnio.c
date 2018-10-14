@@ -9,7 +9,7 @@
 #include <pthread.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <netinet/sctp.h>
+//#include <netinet/sctp.h>
 #include <sys/types.h>
 #include "proxyPopv3nio.h"
 #include "buffer.h"
