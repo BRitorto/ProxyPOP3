@@ -580,6 +580,7 @@ static void transformInit(const unsigned state, MultiplexorKey key) {
         close(transform->infd[0]);
         dup2(transform->outfd[1], STDOUT_FILENO);
         close(transform->outfd[1]);
+        //freopen ("/dev/null", "w", stdout);
         checkFailWithFinally(system("cat"), errorTransformHandler, &key, "Transform fail: cannot execl.");
     } else {
         transform->slavePid = pid;
