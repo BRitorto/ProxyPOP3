@@ -21,6 +21,8 @@
 #include "stateMachine.h"
 #include "helloParser.h"
 #include "capaParser.h"
+#include "commandParser.h"
+#include "responseParser.h"
 
 #define BUFFER_SIZE 2048
 
@@ -72,23 +74,6 @@ typedef struct transformStruct {
     bufferADT           writeBuffer;
 } transformStruct;
 
-typedef enum commandType {
-    CMD_USER     = 0,
-    CMD_PASS     = 1,
-    CMD_APOP     = 2,
-    CMD_RETR     = 3,
-    CMD_OTHER    = 4,
-} commandType;
-
-typedef struct commandStruct {
-    commandType         type;
-    bool                indicator;
-    char *              startCommandPtr;
-    char *              startResponsePtr;
-    size_t              responseSize;
-    bool                isResponseComplete;
-} commandStruct;
-
 typedef struct requestStruct {
     commandStruct       commands[512];
     size_t              commandsSize;
@@ -108,7 +93,7 @@ typedef struct proxyPopv3 {
     transformStruct                transform;
     requestStruct                  request;
     commandParser                  commandParser;
-    indicatorParser                indicatorParser;
+    responseParser                 responseParser;
 
     /** estados para el clientFd */
     union {    
@@ -151,7 +136,7 @@ static void deleteProxyPopv3(proxyPopv3 * p);
 
 static void copyInit(const unsigned state, MultiplexorKey key);
 
-static fdInterest copyComputeInterests(MultiplexorADT mux, copyStruct * d);
+static fdInterest copyComputeInterests(MultiplexorKey key, copyStruct * copy);
 
 static copyStruct * copyPtr(MultiplexorKey key);
 
@@ -456,7 +441,10 @@ static void copyInit(const unsigned prevState, MultiplexorKey key) {
     copy->writeBuffer  = proxy->readBuffer;
     copy->duplex       = READ | WRITE;
     copy->other        = &(proxy->client.copy);
-    copy->nextState    = COPY; 
+    copy->nextState    = COPY;
+
+    if(prevState == TRANSFORM_RECV && !canWrite(proxy->writeBuffer))
+         copy->other->nextState = TRANSFORM_RECV;
 }
 
 static fdInterest copyComputeInterests(MultiplexorKey key, copyStruct * copy) {
@@ -503,11 +491,11 @@ static unsigned processCommands(MultiplexorKey key, requestStruct * request) {
                 userIndex = i;
             else if(userIndex != -1 && commands[i].type == CMD_PASS && commands[i].indicator) {
                 proxy->user.isAuth   = true;
-                proxy->user.name = getArgs(buffer, userIndex, 1);
+                proxy->user.name = getUsername(commands[userIndex]);
             }
             else if(commands[i].type == CMD_APOP && commands[i].indicator) {
                 proxy->user.isAuth   = true;
-                proxy->user.name = getArgs(buffer, commands[i].startCommandPtr, 1);
+                proxy->user.name = getUsername(commands[i]); //recordar hacer free
             }
         }
         if(commands[i].type == CMD_RETR && commands[i].indicator && proxyConf.transformation == 1) {
@@ -543,12 +531,12 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
             copy->other->duplex &= ~WRITE;
         }
     } else {
-        if(copy->fd == proxy->clientFd) {                                                       //readBuffer
-            commandParserConsume(proxy->commandParser, copy->readBuffer, copy->writeBuffer, request->commands, &error);
+        if(copy->fd == proxy->clientFd) {                  
+            commandParserConsume(proxy->commandParser, copy->readBuffer, request->commands, &request->commandsSize);
             if(error)       //EL CLIENTE NO SABE POPV3
                 ret = ERROR;
-        } else if(copy->fd == proxy->originFd) {                                                       //readBuffer
-            indicatorParserConsume(proxy->indicatorParser, copy->readBuffer, copy->writeBuffer, request->commands, &error);
+        } else if(copy->fd == proxy->originFd) {           //buffer uno por origin otro por client
+            responseParserConsume(proxy->responseParser, copy->readBuffer, request->commands, &request->commandsSize, &error);
             if(error)       //EL SERVIDOR NO SABE POPV3
                 ret = ERROR;
             else
