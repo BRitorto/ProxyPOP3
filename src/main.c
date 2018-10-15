@@ -52,11 +52,7 @@ static void sigChildHandler(const int signal) {
     while(waitpid(-1, 0, WNOHANG) != -1);
 }
 
-static char * stdErrorFilePath = "/dev/null";
 
-static char * defaultReplaceMsg = "Parte remplazada";
-
-static char * replaceMsg = NULL;
 
 static unsigned adminPort = 9090;
 
@@ -64,7 +60,13 @@ static unsigned port = 1110;
 
 static in_port_t originPort = 110;
 
+static char * replaceMsg = NULL;
+
 static char * transformCommand = NULL;
+
+static char * stdErrorFilePath = "/dev/null";
+
+static char * defaultReplaceMsg = "Parte remplazada";
 
 static void help(int argc) {
     if(argc == 2) {
@@ -164,18 +166,18 @@ static void parseOptionArguments(int argc, const char * argv[]) {
         replaceMsg = defaultReplaceMsg;
 }
 
-static void loggerInit(void) {
+static void loggerInit(int * fds) {
     loggerSetColor(true);
     loggerSetQuiet(false);
     loggerSetColor(true);
     loggerSetLevel(LOG_LEVEL_TRACE);
-    int fds[] = {-1, -1, -1, -1, -1, -1, -1};
     loggerSetFdsByLevel(fds);
 }
 
 int main(const int argc, const char ** argv) {
     
-    loggerInit();
+    int fds[] = {-1, -1, -1, -1, -1, -1, -1};
+    loggerInit(fds);
 
     parseOptionArguments(argc, argv);	   
 

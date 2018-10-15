@@ -107,7 +107,7 @@ authState authConsume(authParser * parser, bufferADT readBuffer, bufferADT write
     authState state = parser->state;
     char currentUser[MAX_MSG_SIZE - indicatorMsgSize - 2];
     int i = 0;
-    authType = UNKNOWN_AUTH;
+    type = UNKNOWN_AUTH;
 
     while(canRead(readBuffer) && canWrite(writeBuffer)) {
         const uint8_t c = readAByte(readBuffer);

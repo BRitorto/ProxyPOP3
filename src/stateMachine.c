@@ -27,11 +27,12 @@ inline static void handleFirst(stateMachine stm, MultiplexorKey key) {
 
 void stateMachineJump(stateMachine stm, unsigned next, MultiplexorKey key) {
     checkGreaterOrEqualsThan(stm->maxState, next, "Error the next state is grather than max state.");
-    unsigned prevState = stm->current->state;
+    unsigned prevState = stm->current->state;    
+    unsigned nextState = (stm->states + next)->state;
 
     if(stm->current != stm->states + next) {
         if(stm->current != NULL && stm->current->onDeparture != NULL) {
-            stm->current->onDeparture(stm->current->state, key);
+            stm->current->onDeparture(nextState, key);
         }
         stm->current = stm->states + next;
         

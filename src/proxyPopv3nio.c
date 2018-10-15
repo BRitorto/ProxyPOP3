@@ -29,12 +29,17 @@
 typedef enum proxyPopv3State {
     HELLO_READ,
     CHECK_CAPABILITIES,
-    AUTH,
     COPY,
-    TRANSFORM,
+    TRANSFORM_SEND,
+    TRANSFORM_RECV,
     DONE,
     ERROR,
 } proxyPopv3State;
+
+typedef struct userStruct {
+    char *              name;
+    bool                isAuth;
+} userStruct;
 
 typedef struct helloStruct {
     bufferADT           readBuffer;
@@ -53,30 +58,63 @@ typedef struct copyStruct {
     bufferADT           readBuffer;
     bufferADT           writeBuffer;
     fdInterest          duplex;
-    proxyPopv3State     nextState;
     struct copyStruct * other;
+    proxyPopv3State     nextState;
 } copyStruct;
 
 typedef struct transformStruct {
     int                 infd[2];
     int                 outfd[2];
     pid_t               slavePid;
+    bool                isCompleteTransform;
+    size_t              sendSize;
     bufferADT           readBuffer;
     bufferADT           writeBuffer;
 } transformStruct;
+
+typedef enum commandType {
+    CMD_USER     = 0,
+    CMD_PASS     = 1,
+    CMD_APOP     = 2,
+    CMD_RETR     = 3,
+    CMD_OTHER    = 4,
+} commandType;
+
+typedef struct commandStruct {
+    commandType         type;
+    bool                indicator;
+    char *              startCommandPtr;
+    char *              startResponsePtr;
+    size_t              responseSize;
+    bool                isResponseComplete;
+} commandStruct;
+
+typedef struct requestStruct {
+    commandStruct       commands[512];
+    size_t              commandsSize;
+    size_t              transformsIndex[128];       //checkear o hacer matematicas
+    size_t              transformsQty;    
+    size_t              processedSize;
+} requestStruct;
 
 typedef struct proxyPopv3 {
     int originFd;
     int clientFd;
     bufferADT readBuffer;
     bufferADT writeBuffer;
-    char user[256];
+    userStruct user;
+    
+    /** informacion que puede persistir a través de los estados */
+    transformStruct                transform;
+    requestStruct                  request;
+    commandParser                  commandParser;
+    indicatorParser                indicatorParser;
 
     /** estados para el clientFd */
-    union {
+    union {    
         helloStruct                hello;
         copyStruct                 copy;
-        transformStruct            transform;
+        transformStruct *          transform;
     } client;
     /** estados para el originFd */
     union {
@@ -353,7 +391,6 @@ static void checkCapabilitiesInit(const unsigned state, MultiplexorKey key) {
 }
 
 static unsigned checkCapabilitiesWrite(MultiplexorKey key) {
-    proxyPopv3 * proxy = ATTACHMENT(key);
     const char *capaMsg = "CAPA\r\n";
       unsigned  ret     = CHECK_CAPABILITIES;
         size_t  count   = strlen(capaMsg); 
@@ -402,73 +439,6 @@ static unsigned checkCapabilitiesRead(MultiplexorKey key) {
     return ret;
 }
 
-static void authInit(const unsigned state, MultiplexorKey key) {
-    authStruct * auth = &ATTACHMENT(key)->client.auth;
-
-    auth->user = ATTACHMENT(key)->user;
-    logDebug("AuthInit");
-}
-
-static unsigned authRead(MultiplexorKey key) {
-    authStruct * auth = &ATTACHMENT(key)->client.auth;
-    unsigned  ret       = AUTH;
-        bool  error     = false;
-     uint8_t *writePtr;
-      size_t  count;
-     ssize_t  n;
-
-
-    writePtr = getWritePtr(auth->readBuffer, &count);
-    n = recv(key->fd, writePtr, count, 0);
-    if(n > 0) {
-        updateWritePtr(auth->readBuffer, n);
-        const authState state = authConsume(&auth->parser, auth->readBuffer, auth->writeBuffer, auth->user, &auth->type, &error);
-        if(authInitIsDone(state, 0)) {
-            if(MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, NO_INTEREST) &&
-               MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->originFd, WRITE)) {
-                ret = COPY;
-            }
-            else
-                return ERROR; 
-        }
-    } else {
-        ret = ERROR;
-    }
-    return ret;
-}
-
-static unsigned authWrite(MultiplexorKey key) {
-    authStruct * auth = &ATTACHMENT(key)->client.auth;
-    size_t size;
-    ssize_t n;
-    bufferADT buffer = auth->writeBuffer;
-    unsigned ret = AUTH;
-
-    uint8_t * ptr = getReadPtr(buffer, &size);
-    n = send(key->fd, ptr, size, MSG_NOSIGNAL);
-    if(n > 0) {
-        const helloState state = helloConsume(&hello->parser, auth->writeBuffer, &error);
-        if(error)       //EL SERVIDOR RESPONDIO -ERR O NO SABE POPV3 
-            ret = ERROR;//PODRIA IR A UN ESTADO PARA INFORMAR AL CLIENTE Q PASO, TENGO LA RESPUESTA CAPAS PARTIDA EN LOS DOS BUFFERS DEBERIA LIMPIARLOS
-        else if(helloIsDone(state, 0)) {
-
-            if(MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->originFd, NO_INTEREST) &&
-               MUX_SUCCESS == setInterest(key->mux, ATTACHMENT(key)->clientFd, READ)) {
-                if(auth->type == USER_AUTH)
-                    ret = AUTH_COMPLETE;
-                else if(auth->type == APOP_AUTH)
-                    ret = COPY;
-                else   
-                    ret = ERROR;
-            }
-            else
-                return ERROR; 
-        }
-    }
-
-    return ret;
-}
-
 static void copyInit(const unsigned prevState, MultiplexorKey key) {
     struct proxyPopv3 * proxy = ATTACHMENT(key);
 
@@ -487,14 +457,11 @@ static void copyInit(const unsigned prevState, MultiplexorKey key) {
     copy->duplex       = READ | WRITE;
     copy->other        = &(proxy->client.copy);
     copy->nextState    = COPY; 
-
-    if(prevState == AUTH) 
-        copy->nextState = AUTH;
-    else if(prevState == CHECK_CAPABILITIES || prevState == HELLO_READ)
-        copy->other->nextState = AUTH;
 }
 
-static fdInterest copyComputeInterests(MultiplexorADT mux, copyStruct * copy) {
+static fdInterest copyComputeInterests(MultiplexorKey key, copyStruct * copy) {
+    proxyPopv3 * proxy = ATTACHMENT(key);    
+    requestStruct * request = &ATTACHMENT(key)->request;
     fdInterest ret = NO_INTEREST;
     if ((copy->duplex & READ)  && canWrite(copy->readBuffer))
         ret |= READ;
@@ -502,9 +469,15 @@ static fdInterest copyComputeInterests(MultiplexorADT mux, copyStruct * copy) {
         ret |= WRITE;
     }
 
-    if(MUX_SUCCESS != setInterest(mux, *copy->fd, ret))
-        fail("Problem trying to set interest: %d,to multiplexor in copy, fd: %d.", ret, *copy->fd);
-    
+    if(key->fd == proxy->clientFd && request->processedSize != 0) { //por si me quedo algo por enviar, por ejemplo cuando no hay pipelining
+        if(MUX_SUCCESS != setInterest(key->mux, key->fd, WRITE) && MUX_SUCCESS != setInterest(key->mux, proxy->originFd, NO_INTEREST))
+            fail("Problem trying to set interest: %d,to multiplexor in copy, fd: %d.", ret, *copy->fd);
+    }
+    else
+        if(MUX_SUCCESS != setInterest(key->mux, *copy->fd, ret))
+            fail("Problem trying to set interest: %d,to multiplexor in copy, fd: %d.", ret, *copy->fd);
+
+
     return ret;
 }
 
@@ -517,14 +490,47 @@ static copyStruct * copyPtr(MultiplexorKey key) {
     return  copy;
 }
 
-static unsigned copyReadAndQueue(MultiplexorKey key) {
-    copyStruct * copy = copyPtr(key);
-    checkAreEquals(*copy->fd, key->fd, "Copy destination and source have the same file descriptor.");
+static unsigned processCommands(MultiplexorKey key, requestStruct * request) {
+    proxyPopv3 * proxy = ATTACHMENT(key);
+    commandStruct * commands = request->commands;
+    size_t processedSize = 0;
+    int userIndex = -1;
+    unsigned ret = COPY;
 
+    for(size_t i = 0; i < request->commandsSize; i++) {
+        if(!proxy->user.isAuth) {
+            if(commands[i].type == CMD_USER && commands[i].indicator)
+                userIndex = i;
+            else if(userIndex != -1 && commands[i].type == CMD_PASS && commands[i].indicator) {
+                proxy->user.isAuth   = true;
+                proxy->user.name = getArgs(buffer, userIndex, 1);
+            }
+            else if(commands[i].type == CMD_APOP && commands[i].indicator) {
+                proxy->user.isAuth   = true;
+                proxy->user.name = getArgs(buffer, commands[i].startCommandPtr, 1);
+            }
+        }
+        if(commands[i].type == CMD_RETR && commands[i].indicator && proxyConf.transformation == 1) {
+            request->transformsIndex[request->transformsQty++] = i;
+            ret = TRANSFORM_SEND;
+        }
+        if(ret != TRANSFORM_SEND)
+            processedSize += commands[i].responseSize;
+    }
+    request->processedSize += processedSize;
+}
+
+static unsigned copyReadAndQueue(MultiplexorKey key) {
+    copyStruct * copy = copyPtr(key);    
+    requestStruct * request = &ATTACHMENT(key)->request;
+    checkAreEquals(*copy->fd, key->fd, "Copy destination and source have the same file descriptor.");
+    
+    proxyPopv3 * proxy  = ATTACHMENT(key);
+    bufferADT buffer    = copy->readBuffer;        
+    bool  error         = false;
+    unsigned ret        = copy->nextState;
     size_t size;
-    ssize_t n;
-    bufferADT buffer = copy->readBuffer;
-    unsigned ret = copy->nextState;
+    ssize_t n;                  ///////CHECKEAR QUE ONDA CON EL QUIT
 
     uint8_t *ptr = getWritePtr(buffer, &size);
     n = recv(key->fd, ptr, size, 0);
@@ -537,30 +543,40 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
             copy->other->duplex &= ~WRITE;
         }
     } else {
-        updateWritePtr(buffer, n);
+        if(copy->fd == proxy->clientFd) {                                                       //readBuffer
+            commandParserConsume(proxy->commandParser, copy->readBuffer, copy->writeBuffer, request->commands, &error);
+            if(error)       //EL CLIENTE NO SABE POPV3
+                ret = ERROR;
+        } else if(copy->fd == proxy->originFd) {                                                       //readBuffer
+            indicatorParserConsume(proxy->indicatorParser, copy->readBuffer, copy->writeBuffer, request->commands, &error);
+            if(error)       //EL SERVIDOR NO SABE POPV3
+                ret = ERROR;
+            else
+                ret = processCommands(key, &proxy->request);
+        }
+        updateWritePtr(buffer, n);//CHECKEAR BUFFERS
     }
 
     logMetric("Coppied from %s, total copied: %lu bytes.", (*copy->fd == ATTACHMENT(key)->clientFd)? "client to proxy" : "server to proxy", n);
-    logDebug("Duplex READ interest: %d.", copy->duplex);
     
-    if(*copy->fd == ATTACHMENT(key)->originFd && proxyConf.transformation == 1) {
-        ret = TRANSFORM;
+    if(ret == TRANSFORM_SEND) {
         setInterest(key->mux, ATTACHMENT(key)->originFd, NO_INTEREST);
         setInterest(key->mux, ATTACHMENT(key)->clientFd, NO_INTEREST);
     }
-    else {
-        copyComputeInterests(key->mux, copy);
-        copyComputeInterests(key->mux, copy->other);
-    }
-
-    if(copy->duplex == NO_INTEREST) {
-        ret = DONE;
+    else if (ret == COPY) {
+        copyComputeInterests(key, copy);
+        copyComputeInterests(key, copy->other);
+        if(copy->duplex == NO_INTEREST) {
+            ret = DONE;
+        }
     }
     return ret;
 }
 
 static unsigned copyWrite(MultiplexorKey key) {
-    copyStruct * copy = copyPtr(key);
+    copyStruct    * copy    = copyPtr(key);    
+    proxyPopv3    * proxy   = ATTACHMENT(key);
+    requestStruct * request = &ATTACHMENT(key)->request;
     checkAreEquals(*copy->fd, key->fd, "Must be equals both destinations file descriptors.");
 
     size_t size;
@@ -568,7 +584,17 @@ static unsigned copyWrite(MultiplexorKey key) {
     bufferADT buffer = copy->writeBuffer;
     unsigned ret = copy->nextState;
 
+    if(request->processedSize == 0 && *copy->fd == proxy->clientFd) { //algo hicieron mal porque me mandaron sin tener nada listo
+        setInterest(key->mux, proxy->clientFd, READ);
+        return COPY;
+    }
+
     uint8_t *ptr = getReadPtr(buffer, &size);
+    if(*copy->fd == proxy->clientFd)
+        size = request->processedSize;  //checkear
+    else if(originCapabilities.pipeliningStatus == CAPA_NOT_AVAILABLE)
+        size = request->commands[0].responseSize;
+
     n = send(key->fd, ptr, size, MSG_NOSIGNAL);
     if(n == -1) {
         shutdown(*copy->fd, SHUT_WR);
@@ -578,13 +604,13 @@ static unsigned copyWrite(MultiplexorKey key) {
             copy->other->duplex &= ~READ;
         }
     } else {
-        updateReadPtr(buffer, n);
+        updateRequest(request, n);
+        updateReadPtr(buffer, n);   //checkear
     }
     logMetric("Coppied from %s, total copied: %lu bytes.", (*copy->fd == ATTACHMENT(key)->clientFd)? "proxy to client" : "proxy to server", n);
-    logDebug("Duplex WRITE interest: %d.", copy->duplex);
 
-    copyComputeInterests(key->mux, copy);
-    copyComputeInterests(key->mux, copy->other);
+    copyComputeInterests(key, copy);
+    copyComputeInterests(key, copy->other);
     if(copy->duplex == NO_INTEREST) {
         ret = DONE;
     }
@@ -592,14 +618,21 @@ static unsigned copyWrite(MultiplexorKey key) {
 }
 
 static void errorTransformHandler(void * data) {
-    MultiplexorKey key          = *((MultiplexorKey *) data);
+    MultiplexorKey key = *((MultiplexorKey *) data);
 
     stateMachineJump(&ATTACHMENT(key)->stm, COPY, key);
 }
 
-static void transformInit(const unsigned state, MultiplexorKey key) {
+static void transformSendToAppInit(const unsigned prevState, MultiplexorKey key) {
     proxyPopv3      * proxy     = ATTACHMENT(key);
-    transformStruct * transform = &proxy->client.transform;
+    proxy->client.transform     = &proxy->transform;
+    transformStruct * transform = proxy->client.transform;
+    
+    if(!transform->isCompleteTransform) {
+        setInterest(key->mux, transform->infd[1], WRITE);
+        return;
+    }
+    transform->isCompleteTransform = false;
 
     transform->slavePid = -1;
     for(int i = 0; i < 2; i++) {
@@ -635,57 +668,85 @@ static void transformInit(const unsigned state, MultiplexorKey key) {
     }
 }
 
-static unsigned transformRead(MultiplexorKey key) {
+static unsigned transformSendToApp(MultiplexorKey key) {
     transformStruct * transform = &ATTACHMENT(key)->client.transform;
-
-    size_t size;
+    requestStruct   * request   = &ATTACHMENT(key)->request;
+    size_t size, index;
     ssize_t n;
     bufferADT buffer = transform->readBuffer;
-    unsigned ret = TRANSFORM;
+    unsigned ret = TRANSFORM_RECV;
+    uint8_t *ptr;
 
-    uint8_t *ptr = getWritePtr(buffer, &size);
-    n = read(transform->outfd[0], ptr, size);
-    if(n >= 0) {
-        ret = COPY;
-        setInterest(key->mux, transform->outfd[0], NO_INTEREST);
-        updateWritePtr(buffer, n);    
-        logMetric("Coppied from transform app to proxy, total copied: %lu bytes.", n);
-    }
-    else   
-        ret = ERROR;
-    return ret;
-}
+    index = request->transformsIndex[request->transformsQty--];
+    ptr   = request->commands[index].startResponsePtr + transform->sendSize;
+    size  = request->commands[index].responseSize - transform->sendSize;
 
-static unsigned transformWrite(MultiplexorKey key) {
-    transformStruct * transform = &ATTACHMENT(key)->client.transform;
-
-    size_t size;
-    ssize_t n;
-    bufferADT buffer = transform->readBuffer;
-    unsigned ret = TRANSFORM;
-
-    uint8_t *ptr = getReadPtr(buffer, &size);
     n = write(transform->infd[1], ptr, size);   //EXPLOTAR, SI MI BUFFER ES MUY GRANDE POSIBLE DEADLOCK, LA APP TAMBIEN HACE WRITE EN EL OTRO PIPE
     checkFailWithFinally(n, errorTransformHandler, key, "Transform fail: unnable to write in pipe");
     
-    multiplexorStatus status = registerFd(key->mux, transform->outfd[0], &proxyPopv3Handler, READ, ATTACHMENT(key));
-    checkAreEqualsWithFinally(status, MUX_SUCCESS, errorTransformHandler, &key, "Transform fail: cannot register OUT pipe in multiplexor.");
+    if(transform->sendSize == 0) {
+        multiplexorStatus status = registerFd(key->mux, transform->outfd[0], &proxyPopv3Handler, READ, ATTACHMENT(key));
+        checkAreEqualsWithFinally(status, MUX_SUCCESS, errorTransformHandler, &key, "Transform fail: cannot register OUT pipe in multiplexor.");
+    }
+    else
+        setInterest(key->mux, transform->outfd[0], READ);
 
+    transform->sendSize += n;
     logMetric("Coppied from proxy to transform app, total copied: %lu bytes.", n);
-    
-    updateReadPtr(buffer, n);
     setInterest(key->mux, transform->infd[1], NO_INTEREST);
+    
+    if(request->commands[index].isResponseComplete && request->commands[index].responseSize == transform->sendSize)
+        close(transform->infd[1]);
     return ret;
 }
 
-static void transformClose(const unsigned state, MultiplexorKey key) {
+static unsigned transformReceiveFromApp(MultiplexorKey key) {    
+    transformStruct * transform = &ATTACHMENT(key)->client.transform;    
+    requestStruct   * request   = &ATTACHMENT(key)->request;
+    size_t size;
+    ssize_t n;
+    bufferADT buffer = transform->readBuffer;
+    unsigned ret = TRANSFORM_RECV;
+
+    uint8_t *ptr = getWritePtr(buffer, &size);
+    n = read(transform->outfd[0], ptr, size);
+    if(n == 0) { 
+        setInterest(key->mux, transform->outfd[0], NO_INTEREST);
+        transform->isCompleteTransform = true;
+        if(request->transformsQty > 0)
+            ret = TRANSFORM_SEND;
+        else
+            ret = COPY;
+    }
+    else if(n > 0) 
+        logMetric("Coppied from transform app to proxy, total copied: %lu bytes.", n);
+    else
+        ret = ERROR;
+    
+    updateWritePtr(buffer, n);
+    if(!canWrite(buffer)) {        
+        setInterest(key->mux, transform->outfd[0], NO_INTEREST);
+        setInterest(key->mux, &ATTACHMENT(key)->clientFd, WRITE);
+        ret = COPY;
+    }
+    return ret;
+}
+
+static void transformClose(const unsigned nextState, MultiplexorKey key) {
     proxyPopv3      * proxy     = ATTACHMENT(key);
     transformStruct * transform = &proxy->client.transform;
-
-    if(transform->slavePid > 0) 
-        kill(transform->slavePid, SIGKILL);
+    
+    if(nextState == TRANSFORM_RECV && !transform->isCompleteTransform)
+        return; 
+    else if(!transform->isCompleteTransform) {        
+        setInterest(key->mux, transform->outfd[0], NO_INTEREST);
+        setInterest(key->mux, transform->infd[1], NO_INTEREST);
+        return;
+    }
     if(transform->slavePid == -1)
-        exit(1);
+        exit(1);   
+    else
+        kill(transform->slavePid, SIGKILL); 
 
     for(int i = 0; i < 2; i++) {
         if(transform->infd[i] >= 0) {
@@ -697,12 +758,9 @@ static void transformClose(const unsigned state, MultiplexorKey key) {
             close(transform->outfd[i]);
         }
     }
-    deleteBuffer(proxy->readBuffer);
-    proxy->readBuffer = transform->writeBuffer;
-    deleteBuffer(transform->readBuffer);
-    
-    logDebug("Transform done");
-    setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE);
+    if(nextState == COPY) {
+        setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE);
+    }
 }
 
 
@@ -718,20 +776,19 @@ static const struct stateDefinition clientStatbl[] = {
         .onReadReady      = checkCapabilitiesRead,
         .onWriteReady     = checkCapabilitiesWrite,
     }, {
-        .state            = HELLO_WRITE,
-        .onArrival        = helloWriteInit,
-        .onWriteReady     = helloWrite,
-    },{
         .state            = COPY,
         .onArrival        = copyInit,
         .onReadReady      = copyReadAndQueue,
         .onWriteReady     = copyWrite,
     }, {
-        .state            = TRANSFORM,
-        .onArrival        = transformInit,
+        .state            = TRANSFORM_SEND,
+        .onArrival        = transformSendToAppInit,
         .onDeparture      = transformClose,
-        .onReadReady      = transformRead,
-        .onWriteReady     = transformWrite,
+        .onWriteReady     = transformSendToApp,
+    }, {
+        .state            = TRANSFORM_RECV,
+        .onDeparture      = transformClose,
+        .onReadReady      = transformReceiveFromApp,
     }, {
         .state            = DONE,
 
