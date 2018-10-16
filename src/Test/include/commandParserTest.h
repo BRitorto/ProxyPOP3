@@ -11,5 +11,7 @@ void testGetUsernameApop(CuTest * tc);
 
 void testParseCommands(CuTest * tc);
 
+void testInvalidCommands(CuTest * tc);
+
 #endif
 

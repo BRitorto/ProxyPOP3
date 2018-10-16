@@ -86,12 +86,44 @@ void testParseCommands(CuTest * tc) {
     CuAssertIntEquals(tc, 1, commands[2].isMultiline);
 }
 
+void testInvalidCommands(CuTest * tc) {
+    commandParser parser;
+    commandParserInit(&parser);
+
+
+    char * testCommands = "asdasdPASS 1234\r\nLIST\r\nCAPA\r\nLIST 1 2\r\nRETRrive\r\nDELETE\r\n USER username\r\nAPOP Test Hash\r\n";
+    bufferADT buffer = createBuffer(strlen(testCommands));
+
+    size_t size;
+    uint8_t * ptr = getWritePtr(buffer, &size);
+    memcpy(ptr, testCommands, size);
+    updateWritePtr(buffer, size);
+
+    commandStruct commands[8];
+    size_t commandQty = 0;
+    commandParserConsume(&parser, buffer, commands, &commandQty);
+    //CuAssertIntEquals(tc, 8, commandQty);
+
+    CuAssertIntEquals(tc, CMD_OTHER, commands[0].type);
+    CuAssertIntEquals(tc, CMD_LIST, commands[1].type);
+    CuAssertIntEquals(tc, CMD_CAPA, commands[2].type);
+    CuAssertIntEquals(tc, CMD_OTHER, commands[3].type);
+    CuAssertIntEquals(tc, CMD_OTHER, commands[4].type);
+    CuAssertIntEquals(tc, CMD_OTHER, commands[5].type);
+    CuAssertIntEquals(tc, CMD_OTHER, commands[6].type);
+    CuAssertIntEquals(tc, CMD_APOP, commands[7].type); 
+
+}
+
+
 CuSuite * getCommandParserTest(void) {
     CuSuite* suite = CuSuiteNew();
     
     SUITE_ADD_TEST(suite, testGetUsernameUser);
     SUITE_ADD_TEST(suite, testGetUsernameApop);
     SUITE_ADD_TEST(suite, testParseCommands);
+    SUITE_ADD_TEST(suite, testInvalidCommands);
+
 
     return suite;
 }
