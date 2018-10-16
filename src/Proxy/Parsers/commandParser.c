@@ -45,15 +45,13 @@ static const char * crlfMsg     = "\r\n";
 static const int    crlfMsgSize = 2;
 
 
-static void initializeCommand(commandStruct * command, const uint8_t * ptr, bool * invalidType) {
+static void initializeCommand(commandStruct * command, const uint8_t * ptr) {
     command->type = CMD_OTHER;
     command->argsQty = 0;
     command->indicator = false;
     command->startCommandPtr = (char *) ptr;
     command->startResponsePtr = NULL;
     command->responseSize = -1;
-    for(int i = 0; i < CMD_TYPES_QTY; i++) 
-        invalidType[i] = false;
 }
 
 void commandParserInit(commandParser * parser) {
@@ -66,11 +64,15 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
     commandStruct * currentCommand = commands + *commandsSize;
     const uint8_t c = *ptr;
    
-    if(parser->lineSize == 0)
-        initializeCommand(currentCommand, ptr, parser->invalidType);
+    if(parser->lineSize == 0) {
+        initializeCommand(currentCommand, ptr);
+        parser->invalidQty = 0;
+        for(int i = 0; i < CMD_TYPES_QTY; i++) 
+            parser->invalidType[i] = false;
+    }
     
     switch(parser->state) {
-        case COMMAND_TYPE:
+        case COMMAND_TYPE:    
             for(size_t i = 0; i < CMD_TYPES_QTY; i++) {
                 if(!parser->invalidType[i]) {
                     if(toupper(c) != commandTable[i].name[parser->lineSize]) {
@@ -88,7 +90,7 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                         break;
                     }
                 }
-                if(parser->invalidQty == CMD_TYPES_QTY)
+                if(parser->invalidQty == CMD_TYPES_QTY) 
                     parser->state = COMMAND_ERROR;
             }
             break;
@@ -116,16 +118,13 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
             break;
 
         case COMMAND_CRLF:
-            printf("CRLF stateSize: %zu c = %d\n" , parser->stateSize, c == '\n');
-
             if(c == crlfMsg[parser->stateSize]) {
                 if(parser->stateSize == crlfMsgSize - 1) {
-                    printf("ACAAA\n");
                     parser->state     = COMMAND_TYPE;
-                    parser->lineSize  = 0;
+                    parser->lineSize  = -1;
                     parser->stateSize = 0;
                     currentCommand->isMultiline = IS_MULTILINE(currentCommand);
-                    *commandsSize +=1;
+                    *commandsSize = *commandsSize + 1;                    
                 }
             }
             else{

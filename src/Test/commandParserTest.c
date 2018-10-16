@@ -50,7 +50,7 @@ void testParseCommands(CuTest * tc) {
     commandStruct commands[8];
     size_t commandQty = 0;
     commandParserConsume(&parser, buffer, commands, &commandQty);
-    CuAssertIntEquals(tc, commandQty, 8);
+    CuAssertIntEquals(tc, 8, commandQty);
     CuAssertIntEquals(tc, CMD_USER, commands[0].type);
     CuAssertIntEquals(tc, CMD_PASS, commands[1].type);
     CuAssertIntEquals(tc, CMD_LIST, commands[2].type);

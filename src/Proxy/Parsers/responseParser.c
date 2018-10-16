@@ -82,7 +82,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
                     }
                     else {
                         parser->state     = RESPONSE_INIT;
-                        parser->lineSize  = 0;
+                        parser->lineSize  = -1;
                         parser->stateSize = 0;
                         *commandsSize += 1;
                     }
@@ -111,7 +111,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
             if(c == crlfMultilineMsg[parser->stateSize++]) {
                 if(parser->stateSize == crlfMultilineMsgSize) {
                     parser->state     = RESPONSE_INIT;
-                    parser->lineSize  = 0;  //si quiero sacarle el puntito lo hago aca
+                    parser->lineSize  = -1;  //si quiero sacarle el puntito lo hago aca
                     parser->stateSize = 0;
                     *commandsSize += 1;
                 }
