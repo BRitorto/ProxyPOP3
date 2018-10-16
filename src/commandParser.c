@@ -8,7 +8,7 @@
 
 #include "commandParser.h"
 #include "errorslib.h"
-#include "string.h"
+#include "stringlib.h"
 
 
 #define MAX_MSG_SIZE 512
@@ -45,11 +45,11 @@ static const char * crlfMsg     = "\r\n";
 static const int    crlfMsgSize = 2;
 
 
-static initializeCommand(commandStruct * command, const uint8_t * ptr, bool * invalidType) {
+static void initializeCommand(commandStruct * command, const uint8_t * ptr, bool * invalidType) {
     command->type = CMD_OTHER;
     command->argsQty = 0;
     command->indicator = false;
-    command->startCommandPtr = ptr;
+    command->startCommandPtr = (char *) ptr;
     command->startResponsePtr = NULL;
     command->responseSize = -1;
     for(int i = 0; i < CMD_TYPES_QTY; i++) 
@@ -121,7 +121,7 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                     parser->lineSize  = 0;
                     parser->stateSize = 0;
                     currentCommand.isMultiline = IS_MULTILINE(currentCommand);
-                    *commandsSize++;
+                    *commandsSize += 1;
                 }
             }
             else
@@ -143,13 +143,13 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
     return parser->state;
 }
 
-commandState commandConsume(commandParser * parser, bufferADT buffer, commandStruct * commands, size_t * commandsSize) {
+commandState commandParserConsume(commandParser * parser, bufferADT buffer, commandStruct * commands, size_t * commandsSize) {
     commandState state = parser->state;
     size_t bufferSize;
     uint8_t * ptr = getReadPtr(buffer, &bufferSize);   
 
     for(size_t i = 0; i < bufferSize; i++) {
-        state = commandParserFeed(parser, &ptr[i], commands, commandsSize);
+        state = commandParserFeed(parser, ptr + i, commands, commandsSize);
     }
     return state;
 }

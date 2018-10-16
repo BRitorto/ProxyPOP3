@@ -77,7 +77,7 @@ typedef struct transformStruct {
 typedef struct requestStruct {
     commandStruct       commands[512];
     size_t              commandsSize;
-    size_t              transformsIndex[128];       //checkear o hacer matematicas
+    size_t              transformsIndex[128];       //checkear o hacer matematicas POR EL SIZE
     size_t              transformsQty;    
     size_t              processedSize;
 } requestStruct;
@@ -234,6 +234,12 @@ static proxyPopv3 * newProxyPopv3(int clientFd, int originFd, size_t bufferSize)
     ret->readBuffer = createBuffer(bufferSize);
     ret->writeBuffer = createBuffer(bufferSize);
 
+    commandParserInit(&ret->commandParser);
+    responseParserInit(&ret->responseParser);
+
+    ret->user.name   = NULL;
+    ret->user.isAuth = false;
+
     ret->stm    .initial   = HELLO_READ;
     ret->stm    .maxState  = ERROR;
     ret->stm    .states    = proxyPopv3DescribeStates();
@@ -252,6 +258,9 @@ static void realDeleteProxyPopv3(proxyPopv3 * proxy) {
 static void deleteProxyPopv3(proxyPopv3 * proxy) {
     if(proxy != NULL) {
         if(proxy->references == 1) {
+            if(proxy->user.name != NULL)
+                free(proxy->user.name);
+            proxy->user.isAuth = false;
             if(poolSize < maxPool) {
                 proxy->next = pool;
                 pool        = proxy;
@@ -506,6 +515,7 @@ static unsigned processCommands(MultiplexorKey key, requestStruct * request) {
             processedSize += commands[i].responseSize;
     }
     request->processedSize += processedSize;
+    return ret;
 }
 
 static unsigned copyReadAndQueue(MultiplexorKey key) {
@@ -531,12 +541,10 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
             copy->other->duplex &= ~WRITE;
         }
     } else {
-        if(copy->fd == proxy->clientFd) {                  
-            commandParserConsume(proxy->commandParser, copy->readBuffer, request->commands, &request->commandsSize);
-            if(error)       //EL CLIENTE NO SABE POPV3
-                ret = ERROR;
-        } else if(copy->fd == proxy->originFd) {           //buffer uno por origin otro por client
-            responseParserConsume(proxy->responseParser, copy->readBuffer, request->commands, &request->commandsSize, &error);
+        if(*copy->fd == proxy->clientFd) {                  
+            commandParserConsume(&proxy->commandParser, copy->readBuffer, request->commands, &request->commandsSize);
+        } else if(*copy->fd == proxy->originFd) {           //buffer uno por origin otro por client
+            responseParserConsume(&proxy->responseParser, copy->readBuffer, request->commands, &request->commandsSize, &error);
             if(error)       //EL SERVIDOR NO SABE POPV3
                 ret = ERROR;
             else
@@ -559,6 +567,22 @@ static unsigned copyReadAndQueue(MultiplexorKey key) {
         }
     }
     return ret;
+}
+
+static inline void updateRequest(requestStruct * request, ssize_t n) {    
+    commandStruct prev, current;
+    ssize_t i = 0;
+    size_t  j = 1;
+
+    while(i < n) {
+        current = request->commands[j];
+        prev    = request->commands[j-1];
+        i += current.startResponsePtr - prev.startResponsePtr;
+        j++;
+    }
+    request->commandsSize -= j-1;
+    const ssize_t size = request->commandsSize * sizeof(commandStruct);
+    memmove(request->commands, request->commands + j-1, size);
 }
 
 static unsigned copyWrite(MultiplexorKey key) {
@@ -592,7 +616,8 @@ static unsigned copyWrite(MultiplexorKey key) {
             copy->other->duplex &= ~READ;
         }
     } else {
-        updateRequest(request, n);
+        if(*copy->fd == proxy->clientFd)
+            updateRequest(request, n);
         updateReadPtr(buffer, n);   //checkear
     }
     logMetric("Coppied from %s, total copied: %lu bytes.", (*copy->fd == ATTACHMENT(key)->clientFd)? "proxy to client" : "proxy to server", n);
@@ -657,16 +682,16 @@ static void transformSendToAppInit(const unsigned prevState, MultiplexorKey key)
 }
 
 static unsigned transformSendToApp(MultiplexorKey key) {
-    transformStruct * transform = &ATTACHMENT(key)->client.transform;
+    transformStruct * transform = ATTACHMENT(key)->client.transform;
     requestStruct   * request   = &ATTACHMENT(key)->request;
     size_t size, index;
     ssize_t n;
-    bufferADT buffer = transform->readBuffer;
+    //bufferADT buffer = transform->readBuffer;
     unsigned ret = TRANSFORM_RECV;
     uint8_t *ptr;
 
     index = request->transformsIndex[request->transformsQty--];
-    ptr   = request->commands[index].startResponsePtr + transform->sendSize;
+    ptr   = (uint8_t *) (request->commands[index].startResponsePtr + transform->sendSize);
     size  = request->commands[index].responseSize - transform->sendSize;
 
     n = write(transform->infd[1], ptr, size);   //EXPLOTAR, SI MI BUFFER ES MUY GRANDE POSIBLE DEADLOCK, LA APP TAMBIEN HACE WRITE EN EL OTRO PIPE
@@ -689,7 +714,7 @@ static unsigned transformSendToApp(MultiplexorKey key) {
 }
 
 static unsigned transformReceiveFromApp(MultiplexorKey key) {    
-    transformStruct * transform = &ATTACHMENT(key)->client.transform;    
+    transformStruct * transform = ATTACHMENT(key)->client.transform;    
     requestStruct   * request   = &ATTACHMENT(key)->request;
     size_t size;
     ssize_t n;
@@ -714,7 +739,7 @@ static unsigned transformReceiveFromApp(MultiplexorKey key) {
     updateWritePtr(buffer, n);
     if(!canWrite(buffer)) {        
         setInterest(key->mux, transform->outfd[0], NO_INTEREST);
-        setInterest(key->mux, &ATTACHMENT(key)->clientFd, WRITE);
+        setInterest(key->mux, ATTACHMENT(key)->clientFd, WRITE);
         ret = COPY;
     }
     return ret;
@@ -722,7 +747,7 @@ static unsigned transformReceiveFromApp(MultiplexorKey key) {
 
 static void transformClose(const unsigned nextState, MultiplexorKey key) {
     proxyPopv3      * proxy     = ATTACHMENT(key);
-    transformStruct * transform = &proxy->client.transform;
+    transformStruct * transform = proxy->client.transform;
     
     if(nextState == TRANSFORM_RECV && !transform->isCompleteTransform)
         return; 

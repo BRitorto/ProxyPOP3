@@ -56,7 +56,9 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
  * @param errored parametro de salida. si es diferente de NULL se deja dicho
  *   si el parsing se debió a una condición de error
  */
-commandState commandConsume(commandParser * parser, bufferADT buffer, commandStruct * commands, size_t * commandsSize);
+commandState commandParserConsume(commandParser * parser, bufferADT buffer, commandStruct * commands, size_t * commandsSize);
+
+char * getUsername(const commandStruct command);
 
 #endif
 

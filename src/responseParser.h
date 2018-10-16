@@ -38,7 +38,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
  * @param errored parametro de salida. si es diferente de NULL se deja dicho
  *   si el parsing se debió a una condición de error
  */
-responseState responseConsume(responseParser * parser, bufferADT buffer, commandStruct * commands, size_t * commandsSize, bool * errored);
+responseState responseParserConsume(responseParser * parser, bufferADT buffer, commandStruct * commands, size_t * commandsSize, bool * errored);
 
 #endif
 

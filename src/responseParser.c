@@ -19,10 +19,8 @@ static const char * negativeIndicatorMsg        = "-ERR";
 static const int    negativeIndicatorMsgSize    = 4;
 static const char * crlfInlineMsg               = "\r\n";
 static const int    crlfInlineMsgSize           = 2;
-static const char * crlfInlineMsg               = "\r\n";
-static const int    crlfInlineMsgSize           = 2;
 static const char * crlfMultilineMsg            = "\r\n.\r\n";
-static const char * crlfMultilineMsgSize        = 5;
+static const int    crlfMultilineMsgSize        = 5;
 
 
 void responseParserInit(responseParser * parser) {
@@ -34,6 +32,8 @@ void responseParserInit(responseParser * parser) {
 responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, commandStruct * commands, size_t * commandsSize) {
     commandStruct currentCommand = commands[*commandsSize];
     const uint8_t c = *ptr; 
+    if(parser->lineSize == 0)
+        currentCommand.startResponsePtr = (char *) ptr;
 
     switch(parser->state) {
         case RESPONSE_INIT:
@@ -76,8 +76,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
             if(c == crlfInlineMsg[parser->stateSize++]) {
                 if(parser->stateSize == crlfInlineMsgSize) {
                     if(currentCommand.isMultiline) {
-                        currentCommand.startResponsePtr = ptr + 1;                        currentCommand.startResponsePtr = ptr + 1;
-                        currentCommand.responseSize     = 0;
+                        currentCommand.responseSize = 0;
                         parser->state     = RESPONSE_BODY;
                         parser->stateSize = 0;
                     }
@@ -85,7 +84,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
                         parser->state     = RESPONSE_INIT;
                         parser->lineSize  = 0;
                         parser->stateSize = 0;
-                        *commandsSize++;
+                        *commandsSize += 1;
                     }
                 }
             }
@@ -114,7 +113,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
                     parser->state     = RESPONSE_INIT;
                     parser->lineSize  = 0;  //si quiero sacarle el puntito lo hago aca
                     parser->stateSize = 0;
-                    *commandsSize++;
+                    *commandsSize += 1;
                 }
             }
             else
@@ -130,15 +129,15 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
     return parser->state;
 }
 
-responseState responseConsume(responseParser * parser, bufferADT buffer, commandStruct * commands, size_t * commandsSize, bool * errored) {
+responseState responseParserConsume(responseParser * parser, bufferADT buffer, commandStruct * commands, size_t * commandsSize, bool * errored) {
     responseState state = parser->state;
     size_t bufferSize;
     uint8_t * ptr = getReadPtr(buffer, &bufferSize);  
 
     for(size_t i = 0; i < bufferSize; i++) {
-        state = responseParserFeed(parser, ptr[i], commands, commandsSize);
+        state = responseParserFeed(parser, ptr + i, commands, commandsSize);
         if(state == RESPONSE_ERROR) {
-            errored = true;
+            *errored = true;
             break;
         }
     }
