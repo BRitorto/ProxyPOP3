@@ -79,6 +79,7 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                     } 
                     else if(parser->lineSize == commandTable[i].length-1) {
                         currentCommand->type = commandTable[i].type;
+                        printf("%s\n", commandTable[i].name);
                         parser->stateSize = 0;
                         if(commandTable[i].argsQtyMax > 0)
                             parser->state = COMMAND_ARGS;
@@ -115,17 +116,21 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
             break;
 
         case COMMAND_CRLF:
+            printf("CRLF stateSize: %zu c = %d\n" , parser->stateSize, c == '\n');
+
             if(c == crlfMsg[parser->stateSize]) {
                 if(parser->stateSize == crlfMsgSize - 1) {
+                    printf("ACAAA\n");
                     parser->state     = COMMAND_TYPE;
                     parser->lineSize  = 0;
                     parser->stateSize = 0;
                     currentCommand->isMultiline = IS_MULTILINE(currentCommand);
-                    *commandsSize += 1;
+                    *commandsSize +=1;
                 }
             }
-            else
+            else{
                 parser->state = COMMAND_ERROR;
+            }
             break;
 
         case COMMAND_ERROR:
