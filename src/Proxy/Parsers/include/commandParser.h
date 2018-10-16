@@ -12,9 +12,9 @@ typedef enum commandType {
     CMD_PASS      =  1,
     CMD_APOP      =  2,
     CMD_RETR      =  3,
-    CMD_LIST      =  5,
-    CMD_CAPA      =  6,
-    CMD_TYPES_QTY =  7,
+    CMD_LIST      =  4,
+    CMD_CAPA      =  5,
+    CMD_TYPES_QTY =  6,
 } commandType;
 
 typedef struct commandStruct {

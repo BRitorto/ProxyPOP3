@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "CuTest.h"
@@ -22,12 +23,15 @@ void testUserCommand(CuTest * tc) {
     memcpy(ptr, testCommand, size);
     updateWritePtr(buffer, size);
 
-    commandStruct command;
-    size_t commandQty = 1;
-    commandParserConsume(&parser, buffer, &command, &commandQty);
+    printf("%s", ptr);
+    commandStruct commands[1];
+    printf("%p\n", (void *) commands);
+    size_t commandQty = 0;
+    commandParserConsume(&parser, buffer, commands, &commandQty);
 
+    printf("%s\n", getUsername(commands[0]));
     CuAssertIntEquals(tc, 1, commandQty);
-    CuAssertIntEquals(tc, command.type, CMD_USER);
+    CuAssertIntEquals(tc, commands[0].type, CMD_USER);
 
 
 }
