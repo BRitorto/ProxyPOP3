@@ -29,7 +29,7 @@ typedef struct responseParser {
 void responseParserInit(responseParser * parser);
 
 /** entrega un byte al parser. retorna true si se llego al final  */
-responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, commandStruct * commands, size_t * commandsSize);
+responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, commandStruct * commands, size_t * responseCount);
 
 /**
  * por cada elemento del buffer llama a `responseParserFeed' hasta que
@@ -38,7 +38,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
  * @param errored parametro de salida. si es diferente de NULL se deja dicho
  *   si el parsing se debió a una condición de error
  */
-responseState responseParserConsume(responseParser * parser, bufferADT buffer, commandStruct * commands, size_t * commandsSize, bool * errored);
+responseState responseParserConsume(responseParser * parser, bufferADT buffer, commandStruct * commands, size_t * responseCount, bool * errored);
 
 #endif
 

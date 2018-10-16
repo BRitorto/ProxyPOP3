@@ -3,6 +3,7 @@
 #include "CuTest.h"
 #include "multiplexorTest.h"
 #include "commandParserTest.h"
+#include "responseParserTest.h"
 #include "stateMachineTest.h"
 
 CuSuite* CuGetSuite();
@@ -15,7 +16,8 @@ void RunAllTests(void)
 	CuSuiteAddSuite(suite, CuGetSuite());
 
 	CuSuiteAddSuite(suite, getMultiplexorTest());
-	CuSuiteAddSuite(suite, getCommandParserTest());
+	CuSuiteAddSuite(suite, getCommandParserTest());	
+	CuSuiteAddSuite(suite, getResponseParserTest());
 	CuSuiteAddSuite(suite, getSateMachineTest());
 
 	

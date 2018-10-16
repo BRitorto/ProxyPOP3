@@ -29,8 +29,8 @@ void responseParserInit(responseParser * parser) {
     parser->stateSize = 0;
 }
 
-responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, commandStruct * commands, size_t * commandsSize) {
-    commandStruct * currentCommand = commands + *commandsSize;
+responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, commandStruct * commands, size_t * responseCount) {
+    commandStruct * currentCommand = commands + *responseCount;
     const uint8_t c = *ptr; 
     if(parser->lineSize == 0)
         currentCommand->startResponsePtr = (char *) ptr;
@@ -84,7 +84,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
                         parser->state     = RESPONSE_INIT;
                         parser->lineSize  = -1;
                         parser->stateSize = 0;
-                        *commandsSize += 1;
+                        *responseCount += 1;
                     }
                 }
             }
@@ -113,7 +113,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
                     parser->state     = RESPONSE_INIT;
                     parser->lineSize  = -1;  //si quiero sacarle el puntito lo hago aca
                     parser->stateSize = 0;
-                    *commandsSize += 1;
+                    *responseCount += 1;
                 }
             }
             else
@@ -129,13 +129,13 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
     return parser->state;
 }
 
-responseState responseParserConsume(responseParser * parser, bufferADT buffer, commandStruct * commands, size_t * commandsSize, bool * errored) {
+responseState responseParserConsume(responseParser * parser, bufferADT buffer, commandStruct * commands, size_t * responseCount, bool * errored) {
     responseState state = parser->state;
     size_t bufferSize;
     uint8_t * ptr = getReadPtr(buffer, &bufferSize);  
 
     for(size_t i = 0; i < bufferSize; i++) {
-        state = responseParserFeed(parser, ptr + i, commands, commandsSize);
+        state = responseParserFeed(parser, ptr + i, commands, responseCount);
         if(state == RESPONSE_ERROR) {
             *errored = true;
             break;
