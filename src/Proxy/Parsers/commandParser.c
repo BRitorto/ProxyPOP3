@@ -64,9 +64,9 @@ void commandParserInit(commandParser * parser) {
 //checkear commandSize
 commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, commandStruct * commands, size_t * commandsSize) {
     if(parser->lineSize == 0)
-        initializeCommand(&commands[*commandsSize], ptr, parser->invalidType);
+        initializeCommand(&commands[*commandsSize-1], ptr, parser->invalidType);
 
-    commandStruct currentCommand = commands[*commandsSize];
+    commandStruct currentCommand = commands[*commandsSize-1];
     const uint8_t c = *ptr;
 
     switch(parser->state) {
@@ -76,9 +76,11 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                     if(toupper(c) != commandTable[i].name[parser->lineSize]) {
                         parser->invalidType[i] = true;
                         parser->invalidQty++;
-                    }
-                    else if(parser->lineSize == commandTable[i].length - 1) {
+                        printf("%c\n", c );
+                    } 
+                    else if(parser->lineSize == commandTable[i].length-1) {
                         currentCommand.type = commandTable[i].type;
+                        printf("es:%zu\n", i);
                         parser->stateSize = 0;
                         if(commandTable[i].argsQtyMax > 0)
                             parser->state = COMMAND_ARGS;
@@ -87,12 +89,16 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                         break;
                     }
                 }
+                printf("LLEGA\n");
                 if(parser->invalidQty == CMD_TYPES_QTY)
                     parser->state = COMMAND_ERROR;
             }
+
             break;
 
         case COMMAND_ARGS:
+                                printf("LLEGUE ARGS\n");
+
             if(c == ' ') {
                 if(currentCommand.argsQty == commandTable[currentCommand.type].argsQtyMax)
                     parser->state = COMMAND_ERROR;
@@ -122,6 +128,7 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                     parser->stateSize = 0;
                     currentCommand.isMultiline = IS_MULTILINE(currentCommand);
                     *commandsSize += 1;
+                    printf("SIZE:%zu\n",*commandsSize );
                 }
             }
             else
@@ -129,6 +136,8 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
             break;
 
         case COMMAND_ERROR:
+                                        printf("LLEGUE ARGS\n");
+
             if(c == crlfMsg[0]) {
                 currentCommand.type = CMD_OTHER;
                 parser->state     = COMMAND_CRLF;
