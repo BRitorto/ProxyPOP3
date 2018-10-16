@@ -119,9 +119,9 @@ void testInvalidCommands(CuTest * tc) {
 CuSuite * getCommandParserTest(void) {
     CuSuite* suite = CuSuiteNew();
     
-    SUITE_ADD_TEST(suite, testGetUsernameUser);
-    SUITE_ADD_TEST(suite, testGetUsernameApop);
-    SUITE_ADD_TEST(suite, testParseCommands);
+    //SUITE_ADD_TEST(suite, testGetUsernameUser);
+    //SUITE_ADD_TEST(suite, testGetUsernameApop);
+    //SUITE_ADD_TEST(suite, testParseCommands);
     SUITE_ADD_TEST(suite, testInvalidCommands);
 
 

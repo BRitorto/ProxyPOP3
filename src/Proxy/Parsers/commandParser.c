@@ -141,6 +141,13 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                 currentCommand->type = CMD_OTHER;
                 parser->state     = COMMAND_CRLF;
                 parser->stateSize = 1;
+            } else if(c == crlfMsg[1]) {                
+                currentCommand->type = CMD_OTHER;
+                parser->state     = COMMAND_TYPE;
+                parser->lineSize  = -1;
+                parser->stateSize = 0;
+                currentCommand->isMultiline = false;
+                *commandsSize = *commandsSize + 1;   
             }
             break;
         default:
