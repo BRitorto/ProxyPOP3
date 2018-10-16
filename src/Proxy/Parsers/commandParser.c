@@ -127,7 +127,6 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                     parser->state     = COMMAND_TYPE;
                     parser->lineSize  = -1;
                     parser->stateSize = 0;
-                    printf("type: %s, args: %zu\n", commandTable[currentCommand->type].name, currentCommand->argsQty);
                     currentCommand->isMultiline = IS_MULTILINE(currentCommand);
                     *commandsSize = *commandsSize + 1;                    
                 }
@@ -165,7 +164,18 @@ commandState commandParserConsume(commandParser * parser, bufferADT buffer, comm
 
 char * getUsername(const commandStruct command) {
     char * ptr = command.startCommandPtr + commandTable[command.type].length + 1;
-    return copyToNewStringEndedIn(ptr, '\r');
+    switch(command.type) {
+        case CMD_USER:
+                return copyToNewStringEndedIn(ptr, '\r');
+                break;
+        case CMD_APOP:
+                return copyToNewStringEndedIn(ptr, ' ');
+                break;
+        default:
+                return NULL;
+            break;
+    }
+    return NULL;
 }
 
 /*

@@ -5,7 +5,9 @@
 
 CuSuite * getCommandParserTest(void);
 
-void testGetUsername(CuTest * tc);
+void testGetUsernameUser(CuTest * tc);
+
+void testGetUsernameApop(CuTest * tc);
 
 void testParseCommands(CuTest * tc);
 

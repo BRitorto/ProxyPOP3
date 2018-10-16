@@ -10,7 +10,7 @@
 #include "commandParser.h"
 #include "buffer.h"
 
-void testGetUsername(CuTest * tc) {
+void testGetUsernameUser(CuTest * tc) {
     commandParser parser;
     commandParserInit(&parser);
 
@@ -28,9 +28,32 @@ void testGetUsername(CuTest * tc) {
     commandParserConsume(&parser, buffer, commands, &commandQty);
 
     CuAssertTrue(tc, 0 == strcmp("Test", getUsername(commands[0])));
-    CuAssertIntEquals(tc, commandQty, 1);
+    CuAssertIntEquals(tc, 1, commandQty);
     CuAssertIntEquals(tc, CMD_USER, commands[0].type);
 
+
+}
+
+void testGetUsernameApop(CuTest * tc) {
+    commandParser parser;
+    commandParserInit(&parser);
+
+
+    char * testCommand = "APOP Test Hash\r\n";
+    bufferADT buffer = createBuffer(strlen(testCommand));
+
+    size_t size;
+    uint8_t * ptr = getWritePtr(buffer, &size);
+    memcpy(ptr, testCommand, size);
+    updateWritePtr(buffer, size);
+
+    commandStruct commands[1];
+    size_t commandQty = 0;
+    commandParserConsume(&parser, buffer, commands, &commandQty);
+
+    CuAssertTrue(tc, 0 == strcmp("Test", getUsername(commands[0])));
+    CuAssertIntEquals(tc, 1, commandQty);
+    CuAssertIntEquals(tc, CMD_APOP, commands[0].type);
 
 }
 
@@ -59,12 +82,15 @@ void testParseCommands(CuTest * tc) {
     CuAssertIntEquals(tc, CMD_OTHER, commands[5].type);
     CuAssertIntEquals(tc, CMD_OTHER, commands[6].type);
     CuAssertIntEquals(tc, CMD_APOP, commands[7].type); 
+
+    CuAssertIntEquals(tc, 1, commands[2].isMultiline);
 }
 
 CuSuite * getCommandParserTest(void) {
     CuSuite* suite = CuSuiteNew();
     
-    SUITE_ADD_TEST(suite, testGetUsername);
+    SUITE_ADD_TEST(suite, testGetUsernameUser);
+    SUITE_ADD_TEST(suite, testGetUsernameApop);
     SUITE_ADD_TEST(suite, testParseCommands);
 
     return suite;
