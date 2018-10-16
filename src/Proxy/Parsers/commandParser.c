@@ -81,7 +81,6 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                     } 
                     else if(parser->lineSize == commandTable[i].length-1) {
                         currentCommand->type = commandTable[i].type;
-                        printf("%s\n", commandTable[i].name);
                         parser->stateSize = 0;
                         if(commandTable[i].argsQtyMax > 0)
                             parser->state = COMMAND_ARGS;
@@ -110,11 +109,16 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                     parser->state = COMMAND_ERROR;
                 else 
                     parser->stateSize++;
-            } else if(c == crlfMsg[0] && commandTable[currentCommand->type].argsQtyMin <= ++currentCommand->argsQty && currentCommand->argsQty <= commandTable[currentCommand->type].argsQtyMax) {
-                parser->state     = COMMAND_CRLF;
-                parser->stateSize = 1;
+            } else if(c == crlfMsg[0]) {
+                if(parser->stateSize > 1)
+                    currentCommand->argsQty++;
+                if(commandTable[currentCommand->type].argsQtyMin <= currentCommand->argsQty && currentCommand->argsQty <= commandTable[currentCommand->type].argsQtyMax) {
+                    parser->state     = COMMAND_CRLF;
+                    parser->stateSize = 1;
+                } else
+                    parser->state     = COMMAND_ERROR;
             } else
-                parser->state     = COMMAND_ERROR;
+                parser->state         = COMMAND_ERROR;
             break;
 
         case COMMAND_CRLF:
@@ -123,6 +127,7 @@ commandState commandParserFeed(commandParser * parser, const uint8_t * ptr, comm
                     parser->state     = COMMAND_TYPE;
                     parser->lineSize  = -1;
                     parser->stateSize = 0;
+                    printf("type: %s, args: %zu\n", commandTable[currentCommand->type].name, currentCommand->argsQty);
                     currentCommand->isMultiline = IS_MULTILINE(currentCommand);
                     *commandsSize = *commandsSize + 1;                    
                 }
