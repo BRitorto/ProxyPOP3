@@ -74,16 +74,27 @@ void testParseCommands(CuTest * tc) {
     size_t commandQty = 0;
     commandParserConsume(&parser, buffer, commands, &commandQty);
     CuAssertIntEquals(tc, 8, commandQty);
-    CuAssertIntEquals(tc, CMD_USER, commands[0].type);
-    CuAssertIntEquals(tc, CMD_PASS, commands[1].type);
-    CuAssertIntEquals(tc, CMD_LIST, commands[2].type);
-    CuAssertIntEquals(tc, CMD_CAPA, commands[3].type);
-    CuAssertIntEquals(tc, CMD_RETR, commands[4].type);
+    CuAssertIntEquals(tc, CMD_USER,  commands[0].type);
+    CuAssertIntEquals(tc, 1, commands[0].argsQty);
+
+    CuAssertIntEquals(tc, CMD_PASS,  commands[1].type);
+    CuAssertIntEquals(tc, 1, commands[1].argsQty);
+
+    CuAssertIntEquals(tc, CMD_LIST,  commands[2].type);
+    CuAssertIntEquals(tc, 0, commands[2].argsQty);
+    CuAssertIntEquals(tc, 1, commands[2].isMultiline);
+
+    CuAssertIntEquals(tc, CMD_CAPA,  commands[3].type);
+    CuAssertIntEquals(tc, 0, commands[3].argsQty);
+
+    CuAssertIntEquals(tc, CMD_RETR,  commands[4].type);
+    CuAssertIntEquals(tc, 1, commands[4].argsQty);
+
     CuAssertIntEquals(tc, CMD_OTHER, commands[5].type);
     CuAssertIntEquals(tc, CMD_OTHER, commands[6].type);
-    CuAssertIntEquals(tc, CMD_APOP, commands[7].type); 
 
-    CuAssertIntEquals(tc, 1, commands[2].isMultiline);
+    CuAssertIntEquals(tc, CMD_APOP,  commands[7].type); 
+    CuAssertIntEquals(tc, 2, commands[7].argsQty);
 }
 
 void testInvalidCommands(CuTest * tc) {
@@ -102,16 +113,16 @@ void testInvalidCommands(CuTest * tc) {
     commandStruct commands[8];
     size_t commandQty = 0;
     commandParserConsume(&parser, buffer, commands, &commandQty);
-    //CuAssertIntEquals(tc, 8, commandQty);
+    CuAssertIntEquals(tc, 8, commandQty);
 
     CuAssertIntEquals(tc, CMD_OTHER, commands[0].type);
-    CuAssertIntEquals(tc, CMD_LIST, commands[1].type);
-    CuAssertIntEquals(tc, CMD_CAPA, commands[2].type);
+    CuAssertIntEquals(tc, CMD_LIST,  commands[1].type);
+    CuAssertIntEquals(tc, CMD_CAPA,  commands[2].type);
     CuAssertIntEquals(tc, CMD_OTHER, commands[3].type);
     CuAssertIntEquals(tc, CMD_OTHER, commands[4].type);
     CuAssertIntEquals(tc, CMD_OTHER, commands[5].type);
     CuAssertIntEquals(tc, CMD_OTHER, commands[6].type);
-    CuAssertIntEquals(tc, CMD_APOP, commands[7].type); 
+    CuAssertIntEquals(tc, CMD_APOP,  commands[7].type); 
 
 }
 
@@ -119,9 +130,9 @@ void testInvalidCommands(CuTest * tc) {
 CuSuite * getCommandParserTest(void) {
     CuSuite* suite = CuSuiteNew();
     
-    //SUITE_ADD_TEST(suite, testGetUsernameUser);
-    //SUITE_ADD_TEST(suite, testGetUsernameApop);
-    //SUITE_ADD_TEST(suite, testParseCommands);
+    SUITE_ADD_TEST(suite, testGetUsernameUser);
+    SUITE_ADD_TEST(suite, testGetUsernameApop);
+    SUITE_ADD_TEST(suite, testParseCommands);
     SUITE_ADD_TEST(suite, testInvalidCommands);
 
 
