@@ -1,7 +1,7 @@
 
 CC       = clang
 # Compiling Flags:
-CFLAGS   = -c -g --std=c99 -pedantic -pedantic-errors -Wall -Wextra -Werror -Wno-unused-parameter -Wno-implicit-fallthrough -D_POSIX_C_SOURCE=200112L  
+CFLAGS   = -c -g --std=c99 -pedantic -pedantic-errors -Wall -Wextra -Werror -Wno-unused-parameter -Wno-implicit-fallthrough -D_POSIX_C_SOURCE=200112L -I./include -I./../Utils/include  -I./Parsers/include -I./../Admin/include 
 
 LINKER 	 = clang
 # Linking Flags:

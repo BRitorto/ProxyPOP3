@@ -1,35 +1,24 @@
-include Makefile.inc
 
-TARGET := main
-SOURCES := $(wildcard *.c)
-OBJECTS := $(SOURCES:.c=.o)
-rm       = rm -rf
+all:  admin utils proxy test run
 
+admin:
+	cd Admin; make all
+utils:
+	cd Utils; make all
 
-all: comp link test run
+proxy:
+	cd Proxy; make all
 
-comp:$(SOURCES)
-	$(CC) $(CFLAGS) $(SOURCES)
-	@echo "Compilation complete."
-
-link:$(OBJECTS)
-	$(LINKER) $(LFLAGS) $(OBJECTS)  -o $(TARGET).out
-	@echo "Linking complete."
-
-%.o : %.c
-	$(CC) $(CFLAGS) $< -o $@
-
-%.out : %.o
-	$(LINKER) $(LFLAGS) $< -o $@
-
-clean:
-	@$(rm) $(OBJECTS)
-	@$(rm) $(OUTPUTS)
-	@echo "Cleanup complete."
 test:
 	cd Test; make all
-
-run:
 	./Test/AllTests.out
+run:
+	./run.sh
 
-.PHONY: clean  all  test
+clean:
+	cd Admin; make clean	
+	cd Utils; make clean
+	cd Proxy; make clean
+	cd Test; make clean
+
+.PHONY: all clean

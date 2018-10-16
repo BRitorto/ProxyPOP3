@@ -9,11 +9,11 @@ rm       = rm -rf
 all: clean comp link
 
 comp:$(SOURCES)
-	$(CC) $(CFLAGS) -I./.. $(SOURCES)
+	$(CC) $(CFLAGS) $(SOURCES)
 	@echo "Tests Compilation complete."
 
 link:$(OBJECTS)
-	$(LINKER) $(LFLAGS) ./../stateMachine.o ./../errorslib.o ./../logger.o $(OBJECTS) -o $(TARGET).out
+	$(LINKER) $(LFLAGS) ./../Proxy/stateMachine.o ./../Utils/errorslib.o ./../Utils/logger.o $(OBJECTS) -o $(TARGET).out
 	@echo "Tests Linking complete."
 
 %.o : %.c
@@ -24,6 +24,7 @@ link:$(OBJECTS)
 
 clean:
 	@$(rm) $(OBJECTS)
+	@$(rm) $(TARGET).out
 	@echo "Tests Cleanup complete."
 
 .PHONY: clean  all  

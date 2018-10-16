@@ -90,29 +90,29 @@ void testStateMachine (CuTest* tc) {
     stateMachineHandlerWrite(&stm, &key);
     CuAssertIntEquals(tc, B,     getState(&stm));
     CuAssertIntEquals(tc, true,  data.arrived[A]);
-    CuAssertIntEquals(tc, true,  data.arrived[B]);
+    CuAssertIntEquals(tc, false,  data.arrived[B]);
     CuAssertIntEquals(tc, false, data.arrived[C]);
-    CuAssertIntEquals(tc, true,  data.departed[A]);
-    CuAssertIntEquals(tc, false, data.departed[B]);
+    CuAssertIntEquals(tc, false,  data.departed[A]);
+    CuAssertIntEquals(tc, true, data.departed[B]);
     CuAssertIntEquals(tc, false, data.departed[C]);
 
     stateMachineHandlerWrite(&stm, &key);
     CuAssertIntEquals(tc, C,     getState(&stm));
     CuAssertIntEquals(tc, true,  data.arrived[A]);
     CuAssertIntEquals(tc, true,  data.arrived[B]);
-    CuAssertIntEquals(tc, true,  data.arrived[C]);
-    CuAssertIntEquals(tc, true,  data.departed[A]);
+    CuAssertIntEquals(tc, false,  data.arrived[C]);
+    CuAssertIntEquals(tc, false,  data.departed[A]);
     CuAssertIntEquals(tc, true,  data.departed[B]);
-    CuAssertIntEquals(tc, false, data.departed[C]);
+    CuAssertIntEquals(tc, true, data.departed[C]);
 
     stateMachineHandlerRead(&stm, &key);
     CuAssertIntEquals(tc, C,     getState(&stm));
     CuAssertIntEquals(tc, true,  data.arrived[A]);
     CuAssertIntEquals(tc, true,  data.arrived[B]);
-    CuAssertIntEquals(tc, true,  data.arrived[C]);
-    CuAssertIntEquals(tc, true,  data.departed[A]);
+    CuAssertIntEquals(tc, false,  data.arrived[C]);
+    CuAssertIntEquals(tc, false,  data.departed[A]);
     CuAssertIntEquals(tc, true,  data.departed[B]);
-    CuAssertIntEquals(tc, false, data.departed[C]);
+    CuAssertIntEquals(tc, true, data.departed[C]);
 
     stateMachineHandlerClose(&stm, &key);
 }
