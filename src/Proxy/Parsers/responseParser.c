@@ -75,7 +75,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
         case RESPONSE_INLINE_CRLF:
             if(c == crlfInlineMsg[parser->stateSize++]) {
                 if(parser->stateSize == crlfInlineMsgSize) {
-                    if(currentCommand->isMultiline) {
+                    if(currentCommand->indicator && currentCommand->isMultiline) {
                         currentCommand->responseSize = 0;
                         parser->state     = RESPONSE_BODY;
                         parser->stateSize = 0;
@@ -93,9 +93,9 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
             break;
 
         case RESPONSE_BODY:
-            if(c == crlfMultilineMsg[3]) {
+            if(c == crlfMultilineMsg[2]) {
                 parser->state     = RESPONSE_MULTILINE_CRLF;
-                parser->stateSize = 2;
+                parser->stateSize = 3;
             } else if(c == crlfMultilineMsg[0])
                 parser->stateSize++;
             else if(c == crlfMultilineMsg[1]) {
@@ -124,7 +124,7 @@ responseState responseParserFeed(responseParser * parser, const uint8_t * ptr, c
         default:
             fail("RESPONSE parser not reconize state: %d", parser->state);
     }
-    if(parser->lineSize++ == MAX_MSG_SIZE && !currentCommand->isMultiline)
+    if(parser->lineSize++ == MAX_MSG_SIZE && (!currentCommand->isMultiline || !currentCommand->indicator))
         parser->state = RESPONSE_ERROR;
     return parser->state;
 }
