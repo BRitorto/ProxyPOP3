@@ -35,7 +35,8 @@ typedef void (*log_LockFn)(void *udata, int lock);
 
 void loggerSetUdata(void *udata);
 void loggerSetLock(log_LockFn fn);
-void loggerSetFdsByLevel(int * fdsLevels);
+void loggerClearFiles(void);
+void loggerSetFileByLevel(FILE * fileLevel, size_t level);
 void loggerSetLevel(int level);
 void loggerSetQuiet(bool enable);
 void loggerSetColor(bool enable);

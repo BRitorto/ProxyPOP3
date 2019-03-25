@@ -15,13 +15,13 @@ static struct {
 	int 		level;
 	bool 		quiet;
 	bool 		color;
-	int * 		fdsLevel;
+	FILE * 		fileLevel[LOG_LEVEL_METRIC + 1];
 	void *		udata;
 	log_LockFn 	lock;
 } logger;
 
 static const char * levelNames[] = {
-	"TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "FATAL", "METRIC"
+	"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL", "METRIC"
 };
 
 static const char * levelColors[] = {
@@ -36,8 +36,14 @@ void loggerSetLock(log_LockFn fn) {
   	logger.lock = fn;
 }
 
-void loggerSetFdsByLevel(int * fdsLevels) {
- 	logger.fdsLevel = fdsLevels;
+void loggerClearFiles(void) {
+	for(size_t i = 0; i <= LOG_LEVEL_METRIC; i++)
+ 		logger.fileLevel[i] = NULL;
+}
+
+void loggerSetFileByLevel(FILE * fileLevel, size_t level) {
+	if(level <= LOG_LEVEL_METRIC)
+ 		logger.fileLevel[level] = fileLevel;
 }
 
 void loggerSetLevel(int level) {
@@ -52,12 +58,12 @@ void loggerSetColor(bool enable) {
   	logger.color = enable;
 }
 
-static void lock() {
+static inline void lock() {
   	if (logger.lock)
     	logger.lock(logger.udata, 1);
 }
 
-static void unlock() {
+static inline void unlock() {
   	if (logger.lock)
     	logger.lock(logger.udata, 0);
 }
@@ -90,13 +96,13 @@ logStatus vlogLogger(int level, const char * file, int line, const char *fmt, va
 	}
 
 	/* Log to file */
-	if (logger.fdsLevel != NULL && logger.fdsLevel[level] >= 0) {
+	if (logger.fileLevel[level] != NULL) {
 		char buf[64];
 		buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", tm)] = '\0';
-		dprintf(logger.fdsLevel[level], "%s %-6s %s:%d: ", buf, levelNames[level], file, line);
-		vdprintf(logger.fdsLevel[level], fmt, args);
-		dprintf(logger.fdsLevel[level], "\n");
-		fsync(logger.fdsLevel[level]);
+		fprintf(logger.fileLevel[level], "%s %-6s %s:%d: ", buf, levelNames[level], file, line);
+		vfprintf(logger.fileLevel[level], fmt, args);
+		fprintf(logger.fileLevel[level], "\n");
+		fflush(logger.fileLevel[level]);
 	}
 
 	/* Release lock */
@@ -104,7 +110,7 @@ logStatus vlogLogger(int level, const char * file, int line, const char *fmt, va
 	return LOG_SUCCESS;
 }
 
-logStatus logLogger(int level, const char * file, int line, const char *fmt, ...) {
+inline logStatus logLogger(int level, const char * file, int line, const char *fmt, ...) {
 	va_list args;
 	logStatus retVal;
 

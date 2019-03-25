@@ -13,7 +13,7 @@ comp:$(SOURCES)
 	@echo "Tests Compilation complete."
 
 link:$(OBJECTS)
-	$(LINKER) $(LFLAGS) ./../Proxy/stateMachine.o ./../Proxy/Parsers/*.o  ./../Utils/*.o $(OBJECTS) -o $(TARGET).out
+	$(LINKER) $(LFLAGS) ./../pop3filter/proxyPopv3nio.o ./../pop3filter/stateMachine.o ./../pop3filter/Parsers/*.o  ./../Utils/*.o $(OBJECTS) -o $(TARGET).out
 	@echo "Tests Linking complete."
 
 %.o : %.c

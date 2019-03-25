@@ -5,7 +5,15 @@
 
 CuSuite * getResponseParserTest(void);
 
-void testPositiveIndicator(CuTest * tc);
+void testNegativeIndicator(CuTest * tc);
+
+void testPositiveIndicatorMultiline(CuTest * tc);
+
+void testSingleLineAndMultiline(CuTest * tc);
+
+void testInvalidTrickyResponse(CuTest * tc);
+
+void testValidTrickyResponse(CuTest * tc);
 
 #endif
 

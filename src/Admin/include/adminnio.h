@@ -4,4 +4,6 @@
 #include "multiplexor.h"
 
 void adminPassiveAccept(MultiplexorKey key);
+void poolAdminDestroy(void);
 #endif
+

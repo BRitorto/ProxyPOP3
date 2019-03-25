@@ -1,0 +1,39 @@
+user franciscosanguineti
+pass 12345678
+retr 1
+retr 1
+                           
+//sed s/o/0/g|sed s/a/4/g
+
+./pop3filter.out -p1111 -o 9091 -l ::1 -L0.0.0.0 127.0.0.1
+
+printf 'USER franciscosanguineti\nPASS 12345678\nLIST\nTOP 1 1\nQUIT\n' | nc -C localhost 1110
+
+printf 'USER franciscosanguineti\nPASS 12345678\nLIST \nTOP 1 1 \nQUIT \n' |nc -C localhost 1110
+
+printf 'USER franciscosanguineti\nPASS 12345678\nRETR 1\n' |nc -C localhost 1110
+
+time printf 'USER franciscosanguineti\nPASS 12345678\nRETR 1\n'|nc -C localhost 1110|pv|tail -n +5|head -n -1|sha256sum
+
+time printf 'USER franciscosanguineti\nPASS 12345678\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\nRETR 1\n'|nc -C localhost 1110|pv|tail -n +5|head -n -1|sha256sum
+
+cat pop3.awk | gzip -9 | base64 H4sIAHBk/1kCA5WSUU/CMBSF3/crDpMQiWHAHkd4mGYgURG38cZLZUWKcrusm5IQ/rurOBQGIfSt5/R89962V5VmppLmq6Am+3pHY2bcev3BEGsD+YoTQekM5s3zA+byg1UmyYRMY2OYL+NBaKLbRSqzOObJdbVd34b+Z9xISPUbyi2+EilaOj4OPL8Ur9Uw7GnRLpPu8+owq7b5A+tom/gq7WjYyA2Ci2D9hE0FUyAJxZGDpxmnVIKBWCT4kRJ37sg9P+6TUJiyOIdHLOIKSpLzBytOalZZ1TdSVq0jvTwOgvD0uO1yWyGnN4mMsOSk2ILv3qM41IbdKomXlK7aJ0rvkXcY3wv9c5i9bzQX+GQFp3B6iVw6WGSMDp3Dvf66WGYUycqhZVlw6ufyViEUE6x3VsPzt8+GjfEN0YpYn0wDAAA=
+
+
+./pop3filter/pop3filter.out -Mimage/jpeg -m holamundo -t 'bash envs.sh' localhost
+
+#!/usr/bin/awk -f
+4
+BEGIN {
+printf "+OK hola!\r\n"
+}
+"QUIT" == toupper($1) {
+printf "+OK Adios!\r\n"
+exit 0
+}
+"USER" == toupper($1) && NF == 2 {
+printf "+OK Hola "$2"\r\n";
+
+
+socat -u - tcp-listen:9898,reuseaddr < ~/.pop3.awk
+
